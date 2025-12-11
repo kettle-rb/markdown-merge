@@ -11,15 +11,10 @@ GIT
       yard
 
 PATH
-  remote: ../..
-  specs:
-    ast-merge (1.0.0)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
   remote: ../bash-merge
   specs:
     bash-merge (1.0.0)
+      ast-merge (~> 1.0)
       ruby_tree_sitter (~> 2.0)
       version_gem (~> 1.1, >= 1.1.9)
 
@@ -27,6 +22,7 @@ PATH
   remote: ../dotenv-merge
   specs:
     dotenv-merge (1.0.0)
+      ast-merge (~> 1.0)
       version_gem (~> 1.1, >= 1.1.9)
 
 PATH
@@ -49,6 +45,7 @@ PATH
   remote: ../prism-merge
   specs:
     prism-merge (1.1.6)
+      ast-merge (~> 1.0)
       prism (~> 1.6)
       version_gem (~> 1.1, >= 1.1.9)
 
@@ -56,12 +53,15 @@ PATH
   remote: ../psych-merge
   specs:
     psych-merge (1.0.0)
+      ast-merge (~> 1.0)
+      psych (~> 5.0)
       version_gem (~> 1.1, >= 1.1.9)
 
 PATH
   remote: ../rbs-merge
   specs:
     rbs-merge (1.0.0)
+      ast-merge (~> 1.0)
       rbs (>= 3.0)
       version_gem (~> 1.1, >= 1.1.9)
 
@@ -74,9 +74,16 @@ PATH
       version_gem (~> 1.1, >= 1.1.9)
 
 PATH
+  remote: ../..
+  specs:
+    ast-merge (1.0.0)
+      version_gem (~> 1.1, >= 1.1.9)
+
+PATH
   remote: .
   specs:
     markdown-merge (1.0.0)
+      ast-merge (~> 1.0)
       version_gem (~> 1.1, >= 1.1.9)
 
 GEM
