@@ -2,14 +2,33 @@
 
 # External gems
 require "version_gem"
+require "set"
 
 # Shared merge infrastructure
 require "ast/merge"
 
-# This gem
+# This gem - only require version
 require_relative "merge/version"
 
 module Markdown
+  # Smart merging for Markdown files using AST-based parsers.
+  #
+  # Markdown::Merge provides a shared foundation for intelligent Markdown merging:
+  # - Base classes for parser-specific implementations
+  # - Matching structural elements (headings, paragraphs, lists, etc.) between files
+  # - Preserving frozen sections marked with HTML comments
+  # - Resolving conflicts based on configurable preferences
+  #
+  # This gem is typically not used directly. Instead, use a parser-specific
+  # implementation like commonmarker-merge or markly-merge.
+  #
+  # @example Using with commonmarker-merge
+  #   require "commonmarker/merge"
+  #   merger = Commonmarker::Merge::SmartMerger.new(template, destination)
+  #   result = merger.merge
+  #
+  # @see FileAnalysisBase Base class for file analysis
+  # @see SmartMergerBase Base class for merge operations
   module Merge
     # Base error class for Markdown::Merge
     # Inherits from Ast::Merge::Error for consistency across merge gems.
@@ -57,6 +76,18 @@ module Markdown
     #     e.errors.each { |error| puts "  #{error.message}" }
     #   end
     class DestinationParseError < ParseError; end
+
+    # Autoload all components
+    autoload :DebugLogger, "markdown/merge/debug_logger"
+    autoload :FreezeNode, "markdown/merge/freeze_node"
+    autoload :FileAnalysisBase, "markdown/merge/file_analysis_base"
+    autoload :FileAligner, "markdown/merge/file_aligner"
+    autoload :ConflictResolver, "markdown/merge/conflict_resolver"
+    autoload :MergeResult, "markdown/merge/merge_result"
+    autoload :TableMatchAlgorithm, "markdown/merge/table_match_algorithm"
+    autoload :TableMatchRefiner, "markdown/merge/table_match_refiner"
+    autoload :CodeBlockMerger, "markdown/merge/code_block_merger"
+    autoload :SmartMergerBase, "markdown/merge/smart_merger_base"
   end
 end
 
