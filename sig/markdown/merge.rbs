@@ -1,6 +1,315 @@
 module Markdown
   module Merge
     VERSION: String
-    # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+    # Base error class for Markdown::Merge
+    class Error < Ast::Merge::Error
+    end
+
+    # Raised when a Markdown file has parsing errors
+    class ParseError < Ast::Merge::ParseError
+      def initialize: (?String? message, ?content: String?, ?errors: Array[untyped]) -> void
+    end
+
+    # Raised when the template file has syntax errors
+    class TemplateParseError < ParseError
+    end
+
+    # Raised when the destination file has syntax errors
+    class DestinationParseError < ParseError
+    end
+
+    # Debug logging utility for Markdown::Merge operations
+    module DebugLogger
+      extend Ast::Merge::DebugLogger
+
+      def self.env_var_name: () -> String
+      def self.env_var_name=: (String name) -> String
+      def self.log_prefix: () -> String
+      def self.log_prefix=: (String prefix) -> String
+      def self.enabled?: () -> bool
+      def self.debug: (*untyped args) -> void
+      def self.info: (*untyped args) -> void
+      def self.warning: (*untyped args) -> void
+      def self.time: [T] (String label) { () -> T } -> T
+      def self.log_node: (untyped node, ?label: String) -> void
+    end
+
+    # Represents a frozen block of Markdown content
+    class FreezeNode < Ast::Merge::FreezeNodeBase
+      def initialize: (
+        start_line: Integer,
+        end_line: Integer,
+        content: String,
+        start_marker: String,
+        end_marker: String,
+        ?nodes: Array[untyped],
+        ?reason: String?
+      ) -> void
+
+      def signature: () -> Array[Symbol | String]
+      def full_text: () -> String
+      def line_count: () -> Integer
+      def contains_type?: (Symbol type_symbol) -> bool
+      def inspect: () -> String
+    end
+
+    # Base class for file analysis for Markdown files
+    class FileAnalysisBase
+      include Ast::Merge::FileAnalyzable
+
+      DEFAULT_FREEZE_TOKEN: String
+
+      attr_reader document: untyped
+      attr_reader statements: Array[untyped]
+
+      def initialize: (
+        String source,
+        ?freeze_token: String,
+        ?signature_generator: (^(untyped) -> (Array[untyped] | untyped | nil))?,
+        **untyped parser_options
+      ) -> void
+
+      # Abstract methods - subclasses must implement
+      def parse_document: (String source) -> untyped
+      def next_sibling: (untyped node) -> untyped?
+
+      def valid?: () -> bool
+      def compute_node_signature: (untyped node) -> Array[untyped]?
+      def fallthrough_node?: (untyped value) -> bool
+      def parser_node?: (untyped value) -> bool
+      def compute_parser_signature: (untyped node) -> Array[untyped]?
+      def safe_string_content: (untyped node) -> String
+      def extract_text_content: (untyped node) -> String
+      def extract_table_header_content: (untyped node) -> String
+      def source_range: (Integer start_line, Integer end_line) -> String
+      def count_children: (untyped node) -> Integer
+
+      private
+
+      def extract_and_integrate_all_nodes: () -> Array[untyped]
+      def collect_top_level_nodes: () -> Array[untyped]
+      def build_freeze_blocks: (Array[untyped] nodes) -> Array[FreezeNode]
+      def integrate_freeze_blocks: (Array[untyped] nodes, Array[FreezeNode] freeze_blocks) -> Array[untyped]
+    end
+
+    # Aligns Markdown block elements between template and destination files
+    class FileAligner
+      attr_reader template_analysis: FileAnalysisBase
+      attr_reader dest_analysis: FileAnalysisBase
+      attr_reader match_refiner: (^(Array[untyped], Array[untyped], Hash[Symbol, untyped]) -> Array[MatchResult])?
+
+      def initialize: (
+        FileAnalysisBase template_analysis,
+        FileAnalysisBase dest_analysis,
+        ?match_refiner: (^(Array[untyped], Array[untyped], Hash[Symbol, untyped]) -> Array[MatchResult])?
+      ) -> void
+
+      def align: () -> Array[Hash[Symbol, untyped]]
+
+      private
+
+      def build_signature_map: (Array[untyped] statements, FileAnalysisBase analysis) -> Hash[Array[untyped], Array[Integer]]
+    end
+
+    # Match result from refiners
+    class MatchResult
+      attr_reader template_node: untyped
+      attr_reader dest_node: untyped
+      attr_reader score: Float
+
+      def initialize: (
+        template_node: untyped,
+        dest_node: untyped,
+        score: Float
+      ) -> void
+    end
+
+    # Resolves conflicts between matching Markdown elements
+    class ConflictResolver < Ast::Merge::ConflictResolverBase
+      def initialize: (
+        preference: Symbol,
+        template_analysis: FileAnalysisBase,
+        dest_analysis: FileAnalysisBase
+      ) -> void
+
+      private
+
+      def resolve_node_pair: (
+        untyped template_node,
+        untyped dest_node,
+        template_index: Integer,
+        dest_index: Integer
+      ) -> Hash[Symbol, untyped]
+
+      def content_identical?: (untyped template_node, untyped dest_node) -> bool
+      def node_to_text: (untyped node, FileAnalysisBase analysis) -> String
+    end
+
+    # Represents the result of a Markdown merge operation
+    class MergeResult < Ast::Merge::MergeResultBase
+      def initialize: (
+        content: String?,
+        ?conflicts: Array[Hash[Symbol, untyped]],
+        ?frozen_blocks: Array[Hash[Symbol, untyped]],
+        ?stats: Hash[Symbol, untyped]
+      ) -> void
+
+      def content: () -> String?
+      def content?: () -> bool
+      def content_string: () -> String?
+      def success?: () -> bool
+      def conflicts?: () -> bool
+      def has_frozen_blocks?: () -> bool
+      def nodes_added: () -> Integer
+      def nodes_removed: () -> Integer
+      def nodes_modified: () -> Integer
+      def merge_time_ms: () -> Float?
+      def frozen_count: () -> Integer
+      def inspect: () -> String
+      def to_s: () -> String
+
+      private
+
+      def default_stats: () -> Hash[Symbol, untyped]
+    end
+
+    # Algorithm for computing match scores between two Markdown tables
+    class TableMatchAlgorithm
+      DEFAULT_WEIGHTS: Hash[Symbol, Float]
+      FIRST_COLUMN_SIMILARITY_THRESHOLD: Float
+
+      attr_reader position_a: Integer?
+      attr_reader position_b: Integer?
+      attr_reader total_tables_a: Integer
+      attr_reader total_tables_b: Integer
+      attr_reader weights: Hash[Symbol, Float]
+
+      def initialize: (
+        ?position_a: Integer?,
+        ?position_b: Integer?,
+        ?total_tables_a: Integer,
+        ?total_tables_b: Integer,
+        ?weights: Hash[Symbol, Float]
+      ) -> void
+
+      def call: (untyped table_a, untyped table_b) -> Float
+
+      private
+
+      def levenshtein_distance: (String a, String b) -> Integer
+      def levenshtein_similarity: (String a, String b) -> Float
+      def extract_rows: (untyped table) -> Array[Array[String]]
+      def extract_cell_text: (untyped cell) -> String
+      def compute_header_match: (Array[Array[String]] rows_a, Array[Array[String]] rows_b) -> Float
+      def compute_first_column_match: (Array[Array[String]] rows_a, Array[Array[String]] rows_b) -> Float
+      def compute_row_content_match: (Array[Array[String]] rows_a, Array[Array[String]] rows_b) -> Float
+      def compute_total_cells_match: (Array[Array[String]] rows_a, Array[Array[String]] rows_b) -> Float
+      def compute_position_score: () -> Float
+      def weighted_average: (Hash[Symbol, Float] scores) -> Float
+    end
+
+    # Match refiner for Markdown tables that didn't match by exact signature
+    class TableMatchRefiner < Ast::Merge::MatchRefinerBase
+      attr_reader algorithm_options: Hash[Symbol, untyped]
+
+      def initialize: (
+        ?threshold: Float,
+        ?algorithm_options: Hash[Symbol, untyped],
+        **untyped options
+      ) -> void
+
+      def call: (
+        Array[untyped] template_nodes,
+        Array[untyped] dest_nodes,
+        ?Hash[Symbol, untyped] context
+      ) -> Array[MatchResult]
+
+      private
+
+      def extract_tables: (Array[untyped] nodes) -> Array[untyped]
+      def table_node?: (untyped node) -> bool
+      def compute_table_similarity: (
+        untyped t_table,
+        untyped d_table,
+        Integer t_idx,
+        Integer d_idx,
+        Integer total_t,
+        Integer total_d
+      ) -> Float
+    end
+
+    # Merges fenced code blocks using language-specific *-merge gems
+    class CodeBlockMerger
+      DEFAULT_MERGERS: Hash[String, ^(String, String, Symbol, **untyped) -> Hash[Symbol, untyped]]
+
+      attr_reader mergers: Hash[String, ^(String, String, Symbol, **untyped) -> Hash[Symbol, untyped]]
+      attr_reader enabled: bool
+
+      def initialize: (
+        ?mergers: Hash[String, ^(String, String, Symbol, **untyped) -> Hash[Symbol, untyped]],
+        ?enabled: bool
+      ) -> void
+
+      def supports_language?: (String? language) -> bool
+      def merge_code_blocks: (
+        untyped template_node,
+        untyped dest_node,
+        preference: Symbol,
+        **untyped opts
+      ) -> Hash[Symbol, untyped]
+
+      # Class methods for specific mergers
+      def self.merge_with_prism: (String template, String dest, Symbol preference, **untyped opts) -> Hash[Symbol, untyped]
+      def self.merge_with_psych: (String template, String dest, Symbol preference, **untyped opts) -> Hash[Symbol, untyped]
+      def self.merge_with_json: (String template, String dest, Symbol preference, **untyped opts) -> Hash[Symbol, untyped]
+      def self.merge_with_toml: (String template, String dest, Symbol preference, **untyped opts) -> Hash[Symbol, untyped]
+
+      private
+
+      def extract_language: (untyped node) -> String?
+      def extract_content: (untyped node) -> String
+      def rebuild_code_block: (String language, String content, untyped reference_node) -> String
+      def not_merged: (String reason) -> Hash[Symbol, untyped]
+    end
+
+    # Base class for smart Markdown file merging
+    class SmartMergerBase
+      attr_reader template_analysis: FileAnalysisBase
+      attr_reader dest_analysis: FileAnalysisBase
+      attr_reader aligner: FileAligner
+      attr_reader resolver: ConflictResolver
+      attr_reader code_block_merger: CodeBlockMerger?
+
+      def initialize: (
+        String template_content,
+        String dest_content,
+        ?signature_generator: (^(untyped) -> (Array[untyped] | untyped | nil))?,
+        ?preference: Symbol,
+        ?add_template_only_nodes: bool,
+        ?inner_merge_code_blocks: (bool | CodeBlockMerger),
+        ?freeze_token: String,
+        ?match_refiner: (^(Array[untyped], Array[untyped], Hash[Symbol, untyped]) -> Array[MatchResult])?,
+        **untyped parser_options
+      ) -> void
+
+      # Abstract methods - subclasses must implement
+      def create_file_analysis: (String content, **untyped options) -> FileAnalysisBase
+      def node_to_source: (untyped node, FileAnalysisBase analysis) -> String
+
+      def template_parse_error_class: () -> Class
+      def destination_parse_error_class: () -> Class
+
+      def merge: () -> String
+      def merge_result: () -> MergeResult
+
+      private
+
+      def build_result_content: (Array[Hash[Symbol, untyped]] alignment) -> String
+      def process_alignment_entry: (Hash[Symbol, untyped] entry) -> String?
+      def handle_match: (Hash[Symbol, untyped] entry) -> String?
+      def handle_template_only: (Hash[Symbol, untyped] entry) -> String?
+      def handle_dest_only: (Hash[Symbol, untyped] entry) -> String?
+    end
   end
 end
