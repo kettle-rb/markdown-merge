@@ -152,9 +152,7 @@ RSpec.describe Markdown::Merge::FileAligner do
         template_only_index = types.index(:template_only)
         dest_only_indices = types.each_index.select { |i| types[i] == :dest_only }
 
-        dest_only_indices.each do |idx|
-          expect(idx).to be < template_only_index
-        end
+        expect(dest_only_indices).to all(be < template_only_index)
       end
     end
   end

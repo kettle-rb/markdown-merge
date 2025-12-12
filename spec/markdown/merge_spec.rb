@@ -2,7 +2,7 @@
 
 RSpec.describe Markdown::Merge do
   it "has a version number" do
-    expect(Markdown::Merge::VERSION).not_to be nil
+    expect(Markdown::Merge::VERSION).not_to be_nil
   end
 
   describe "Error" do

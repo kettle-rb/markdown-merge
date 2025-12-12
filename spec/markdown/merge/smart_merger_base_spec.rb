@@ -69,9 +69,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       end
 
       # Override to return our statements
-      def statements
-        @statements
-      end
+      attr_reader :statements
 
       # Required abstract methods
       def parse_document(source)
@@ -85,7 +83,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       # Signature computation
       def signature_at(index)
         node = @statements[index]
-        return nil unless node
+        return unless node
 
         [:paragraph, "mock_sig_#{index}"]
       end
@@ -729,7 +727,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         def template_parse_error_class
           Class.new(StandardError) do
             def initialize(errors: [])
-              super("Template parse error: #{errors.map(&:message).join(', ')}")
+              super("Template parse error: #{errors.map(&:message).join(", ")}")
             end
           end
         end
@@ -737,7 +735,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         def destination_parse_error_class
           Class.new(StandardError) do
             def initialize(errors: [])
-              super("Destination parse error: #{errors.map(&:message).join(', ')}")
+              super("Destination parse error: #{errors.map(&:message).join(", ")}")
             end
           end
         end
@@ -787,7 +785,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         def template_parse_error_class
           Class.new(StandardError) do
             def initialize(errors: [])
-              super("Template parse error: #{errors.map(&:message).join(', ')}")
+              super("Template parse error: #{errors.map(&:message).join(", ")}")
             end
           end
         end
@@ -795,7 +793,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         def destination_parse_error_class
           Class.new(StandardError) do
             def initialize(errors: [])
-              super("Destination parse error: #{errors.map(&:message).join(', ')}")
+              super("Destination parse error: #{errors.map(&:message).join(", ")}")
             end
           end
         end

@@ -44,8 +44,7 @@ module Markdown
       # @return [Object] The root document node
       attr_reader :document
 
-      # @return [String] The original source content
-      attr_reader :source
+      # Note: :source is inherited from Ast::Merge::FileAnalyzable
 
       # Initialize file analysis
       #

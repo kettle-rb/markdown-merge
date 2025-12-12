@@ -536,10 +536,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       text_child = double("TextChild", type: :text, string_content: "text ")
       code_child = double("CodeChild", type: :code, string_content: "code")
 
-      allow(node).to receive(:walk) do |&block|
-        block.call(text_child)
-        block.call(code_child)
-      end
+      allow(node).to receive(:walk).and_yield(text_child).and_yield(code_child)
 
       result = analysis.send(:extract_text_content, node)
       expect(result).to eq("text code")
@@ -550,10 +547,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       paragraph_child = double("ParagraphChild", type: :paragraph)
       text_child = double("TextChild", type: :text, string_content: "text")
 
-      allow(node).to receive(:walk) do |&block|
-        block.call(paragraph_child)
-        block.call(text_child)
-      end
+      allow(node).to receive(:walk).and_yield(paragraph_child).and_yield(text_child)
 
       result = analysis.send(:extract_text_content, node)
       expect(result).to eq("text")
@@ -597,7 +591,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
             :heading,
             {start_line: 1, end_line: 1},
             nil,
-            1
+            1,
           )
           nodes << title
 
@@ -606,7 +600,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
             :heading,
             {start_line: 4, end_line: 5},
             nil,
-            2
+            2,
           )
           nodes << frozen_header
 
@@ -615,7 +609,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
             :heading,
             {start_line: 8, end_line: 8},
             nil,
-            2
+            2,
           )
           nodes << regular_header
 
@@ -647,7 +641,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       statements = analysis.statements
 
       # The frozen section header should be skipped as it's inside the freeze block
-      non_freeze_statements = statements.reject { |s| s.is_a?(Ast::Merge::FreezeNodeBase) }
+      statements.reject { |s| s.is_a?(Ast::Merge::FreezeNodeBase) }
       freeze_statements = statements.select { |s| s.is_a?(Ast::Merge::FreezeNodeBase) }
 
       expect(freeze_statements.length).to eq(1)
@@ -789,10 +783,10 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
         end
 
         def next_sibling(node)
-          return nil unless @mock_nodes
+          return unless @mock_nodes
 
           idx = @mock_nodes.index(node)
-          return nil if idx.nil? || idx >= @mock_nodes.length - 1
+          return if idx.nil? || idx >= @mock_nodes.length - 1
 
           @mock_nodes[idx + 1]
         end

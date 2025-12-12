@@ -156,10 +156,10 @@ module Markdown
       # @param node [Object] The code block node
       # @return [String, nil] The language identifier
       def extract_language(node)
-        return nil unless node.respond_to?(:fence_info)
+        return unless node.respond_to?(:fence_info)
 
         info = node.fence_info
-        return nil if info.nil? || info.empty?
+        return if info.nil? || info.empty?
 
         # fence_info may contain additional info after the language (e.g., "ruby linenos")
         info.split(/\s+/).first
@@ -266,7 +266,7 @@ module Markdown
         # :nocov: integration - requires json/merge gem
         rescue ::Json::Merge::ParseError => e
           {merged: false, reason: "JSON parse error: #{e.message}"}
-        # :nocov:
+          # :nocov:
         end
 
         # Merge TOML code using toml-merge.

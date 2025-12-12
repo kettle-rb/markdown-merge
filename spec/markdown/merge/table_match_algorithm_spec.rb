@@ -109,7 +109,7 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
       prev_row = nil
 
       rows_data.each_with_index do |cells_data, idx|
-        row_type = idx == 0 ? :table_header : :table_row
+        row_type = (idx == 0) ? :table_header : :table_row
         row = create_mock_row(cells_data, row_type)
 
         if idx == 0
