@@ -57,6 +57,9 @@ module Markdown
       # @return [Hash] Weights for each scoring factor
       attr_reader :weights
 
+      # @return [Symbol] The markdown backend being used
+      attr_reader :backend
+
       # Initialize the table match algorithm.
       #
       # @param position_a [Integer, nil] Position of first table in its document
@@ -64,12 +67,14 @@ module Markdown
       # @param total_tables_a [Integer] Total tables in first document (default: 1)
       # @param total_tables_b [Integer] Total tables in second document (default: 1)
       # @param weights [Hash] Custom weights for scoring factors
-      def initialize(position_a: nil, position_b: nil, total_tables_a: 1, total_tables_b: 1, weights: {})
+      # @param backend [Symbol] Markdown backend for type normalization (default: :commonmarker)
+      def initialize(position_a: nil, position_b: nil, total_tables_a: 1, total_tables_b: 1, weights: {}, backend: :commonmarker)
         @position_a = position_a
         @position_b = position_b
         @total_tables_a = [total_tables_a, 1].max
         @total_tables_b = [total_tables_b, 1].max
         @weights = DEFAULT_WEIGHTS.merge(weights)
+        @backend = backend
       end
 
       # Compute the match score between two tables.
@@ -176,13 +181,22 @@ module Markdown
 
       # Check if a node is a table row type.
       #
+      # Uses NodeTypeNormalizer to map backend-specific types to canonical types,
+      # enabling portable type checking across different markdown parsers.
+      #
+      # NOTE: We use `type` here instead of `merge_type` because this method operates
+      # on child nodes of tables (table_row, table_header), not top-level statements.
+      # Only top-level statements are wrapped by NodeTypeNormalizer with `merge_type`.
+      # However, we use NodeTypeNormalizer.canonical_type to normalize the raw type.
+      #
       # @param node [Object] Node to check
       # @return [Boolean] true if this is a table row
       def table_row_type?(node)
         return false unless node.respond_to?(:type)
 
-        type = node.type
-        type == :table_row || type == :table_header
+        # Normalize the type using NodeTypeNormalizer for backend portability
+        canonical = NodeTypeNormalizer.canonical_type(node.type, @backend || :commonmarker)
+        canonical == :table_row || canonical == :table_header
       end
 
       # Get the next sibling of a node.
@@ -201,14 +215,25 @@ module Markdown
 
       # Extract cell texts from a table row.
       #
+      # Uses NodeTypeNormalizer to map backend-specific types to canonical types,
+      # enabling portable type checking across different markdown parsers.
+      #
+      # NOTE: We use `type` here instead of `merge_type` because this method operates
+      # on child nodes of table rows (table_cell), not top-level statements.
+      # Only top-level statements are wrapped by NodeTypeNormalizer with `merge_type`.
+      # However, we use NodeTypeNormalizer.canonical_type to normalize the raw type.
+      #
       # @param row [Object] Table row node
       # @return [Array<String>] Array of cell text contents
       def extract_cells(row)
         cells = []
         child = row.first_child
         while child
-          if child.respond_to?(:type) && child.type == :table_cell
-            cells << extract_text_content(child)
+          if child.respond_to?(:type)
+            canonical = NodeTypeNormalizer.canonical_type(child.type, @backend || :commonmarker)
+            if canonical == :table_cell
+              cells << extract_text_content(child)
+            end
           end
           child = next_sibling(child)
         end
@@ -217,18 +242,58 @@ module Markdown
 
       # Extract all text content from a node.
       #
+      # Uses recursive traversal instead of `walk` for compatibility
+      # with tree_haver nodes which don't have a `walk` method.
+      #
       # @param node [Object] Node to extract text from
       # @return [String] Concatenated text content
       def extract_text_content(node)
         text_parts = []
-        node.walk do |child|
-          if child.type == :text
-            text_parts << child.string_content.to_s
-          elsif child.type == :code
-            text_parts << child.string_content.to_s
+        collect_text_recursive(node, text_parts)
+        text_parts.join.strip
+      end
+
+      # Recursively collect text content from a node and its descendants.
+      #
+      # Uses NodeTypeNormalizer to map backend-specific types to canonical types,
+      # enabling portable type checking across different markdown parsers.
+      #
+      # NOTE: We use `type` here instead of `merge_type` because this method operates
+      # on child nodes (text, code), not top-level statements.
+      # Only top-level statements are wrapped by NodeTypeNormalizer with `merge_type`.
+      # However, we use NodeTypeNormalizer.canonical_type to normalize the raw type.
+      #
+      # @param node [Object] The node to traverse
+      # @param text_parts [Array<String>] Array to accumulate text into
+      # @return [void]
+      def collect_text_recursive(node, text_parts)
+        # Normalize the type using NodeTypeNormalizer for backend portability
+        canonical_type = NodeTypeNormalizer.canonical_type(node.type, @backend || :commonmarker)
+
+        # Collect text from text and code nodes
+        if canonical_type == :text || canonical_type == :code
+          content = if node.respond_to?(:string_content)
+            node.string_content.to_s
+          elsif node.respond_to?(:text)
+            node.text.to_s
+          else
+            ""
+          end
+          text_parts << content unless content.empty?
+        end
+
+        # Recurse into children - support both children array and first_child iteration
+        if node.respond_to?(:children)
+          node.children.each do |child|
+            collect_text_recursive(child, text_parts)
+          end
+        elsif node.respond_to?(:first_child)
+          child = node.first_child
+          while child
+            collect_text_recursive(child, text_parts)
+            child = child.respond_to?(:next_sibling) ? child.next_sibling : (child.respond_to?(:next) ? child.next : nil)
           end
         end
-        text_parts.join.strip
       end
 
       # (A) Compute header row match percentage using Levenshtein similarity.

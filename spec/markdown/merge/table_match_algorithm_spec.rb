@@ -128,8 +128,8 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
     def create_mock_row(cells_data, row_type)
       row = double("Row")
       allow(row).to receive(:type).and_return(row_type)
-      allow(row).to receive(:respond_to?).with(:type).and_return(true)
-      allow(row).to receive(:respond_to?).with(:next_sibling).and_return(true)
+      allow(row).to receive(:merge_type).and_return(row_type)
+      allow(row).to receive(:respond_to?) { |m, *| [:type, :merge_type, :next_sibling, :first_child].include?(m) }
 
       first_cell = nil
       prev_cell = nil
@@ -154,17 +154,24 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
       # Create a text child node
       text_node = double("TextNode")
       allow(text_node).to receive(:type).and_return(:text)
+      allow(text_node).to receive(:merge_type).and_return(:text)
       allow(text_node).to receive(:string_content).and_return(text)
+      allow(text_node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :string_content, :children, :first_child, :next_sibling].include?(m) }
+      # Text nodes have no children
+      allow(text_node).to receive(:children).and_return([])
+      allow(text_node).to receive(:first_child).and_return(nil)
 
       cell = double("Cell")
       allow(cell).to receive(:type).and_return(:table_cell)
-      allow(cell).to receive(:respond_to?).with(:type).and_return(true)
-      allow(cell).to receive(:respond_to?).with(:next_sibling).and_return(true)
-      allow(cell).to receive(:respond_to?).with(:string_content).and_return(true)
+      allow(cell).to receive(:merge_type).and_return(:table_cell)
       allow(cell).to receive(:string_content).and_return(text)
+      allow(cell).to receive(:respond_to?) { |m, *| [:type, :merge_type, :next_sibling, :string_content, :walk, :children, :first_child].include?(m) }
 
-      # Mock the walk method to yield the text node
+      # Support both walk and children/first_child patterns for compatibility
       allow(cell).to receive(:walk).and_yield(text_node)
+      allow(cell).to receive(:children).and_return([text_node])
+      allow(cell).to receive(:first_child).and_return(text_node)
+      allow(text_node).to receive(:next_sibling).and_return(nil)
       cell
     end
 
@@ -357,8 +364,7 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
 
     it "returns nil when neither method available" do
       node = double("Node")
-      allow(node).to receive(:respond_to?).with(:next_sibling).and_return(false)
-      allow(node).to receive(:respond_to?).with(:next).and_return(false)
+      allow(node).to receive(:respond_to?) { |m, *| false }
 
       result = algorithm.send(:next_sibling, node)
       expect(result).to be_nil
@@ -368,31 +374,34 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
   describe "#table_row_type? (private)" do
     it "returns true for :table_row type" do
       node = double("Row")
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
       allow(node).to receive(:type).and_return(:table_row)
+      allow(node).to receive(:merge_type).and_return(:table_row)
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
 
       expect(algorithm.send(:table_row_type?, node)).to be(true)
     end
 
     it "returns true for :table_header type" do
       node = double("Header")
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
       allow(node).to receive(:type).and_return(:table_header)
+      allow(node).to receive(:merge_type).and_return(:table_header)
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
 
       expect(algorithm.send(:table_row_type?, node)).to be(true)
     end
 
     it "returns false for other types" do
       node = double("Cell")
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
       allow(node).to receive(:type).and_return(:table_cell)
+      allow(node).to receive(:merge_type).and_return(:table_cell)
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
 
       expect(algorithm.send(:table_row_type?, node)).to be(false)
     end
 
     it "returns false when node doesn't respond to type" do
       node = double("Unknown")
-      allow(node).to receive(:respond_to?).with(:type).and_return(false)
+      allow(node).to receive(:respond_to?) { |m, *| false }
 
       expect(algorithm.send(:table_row_type?, node)).to be(false)
     end
@@ -402,13 +411,20 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
     def create_mock_cell(text)
       text_node = double("TextNode")
       allow(text_node).to receive(:type).and_return(:text)
+      allow(text_node).to receive(:merge_type).and_return(:text)
       allow(text_node).to receive(:string_content).and_return(text)
+      allow(text_node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :string_content, :children, :first_child, :next_sibling].include?(m) }
+      allow(text_node).to receive(:children).and_return([])
+      allow(text_node).to receive(:first_child).and_return(nil)
+      allow(text_node).to receive(:next_sibling).and_return(nil)
 
       cell = double("Cell")
       allow(cell).to receive(:type).and_return(:table_cell)
-      allow(cell).to receive(:respond_to?).with(:type).and_return(true)
-      allow(cell).to receive(:respond_to?).with(:next_sibling).and_return(true)
+      allow(cell).to receive(:merge_type).and_return(:table_cell)
+      allow(cell).to receive(:respond_to?) { |m, *| [:type, :merge_type, :next_sibling, :walk, :children, :first_child].include?(m) }
       allow(cell).to receive(:walk).and_yield(text_node)
+      allow(cell).to receive(:children).and_return([text_node])
+      allow(cell).to receive(:first_child).and_return(text_node)
       cell
     end
 
@@ -436,8 +452,8 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
     it "skips non-cell children" do
       text_node = double("Text")
       allow(text_node).to receive(:type).and_return(:text)
-      allow(text_node).to receive(:respond_to?).with(:type).and_return(true)
-      allow(text_node).to receive(:respond_to?).with(:next_sibling).and_return(true)
+      allow(text_node).to receive(:merge_type).and_return(:text)
+      allow(text_node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :next_sibling].include?(m) }
       allow(text_node).to receive(:next_sibling).and_return(nil)
 
       row = double("Row")
@@ -606,10 +622,17 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
     it "extracts text from :text nodes" do
       text_node = double("TextNode")
       allow(text_node).to receive(:type).and_return(:text)
+      allow(text_node).to receive(:merge_type).and_return(:text)
       allow(text_node).to receive(:string_content).and_return("hello")
+      allow(text_node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :string_content, :children, :first_child].include?(m) }
+      allow(text_node).to receive(:children).and_return([])
+      allow(text_node).to receive(:first_child).and_return(nil)
 
       node = double("Node")
-      allow(node).to receive(:walk).and_yield(text_node)
+      allow(node).to receive(:type).and_return(:paragraph)
+      allow(node).to receive(:merge_type).and_return(:paragraph)
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :children, :first_child].include?(m) }
+      allow(node).to receive(:children).and_return([text_node])
 
       result = algorithm.send(:extract_text_content, node)
       expect(result).to eq("hello")
@@ -618,21 +641,44 @@ RSpec.describe Markdown::Merge::TableMatchAlgorithm do
     it "extracts text from :code nodes" do
       code_node = double("CodeNode")
       allow(code_node).to receive(:type).and_return(:code)
+      allow(code_node).to receive(:merge_type).and_return(:code)
       allow(code_node).to receive(:string_content).and_return("puts")
+      allow(code_node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :string_content, :children, :first_child].include?(m) }
+      allow(code_node).to receive(:children).and_return([])
+      allow(code_node).to receive(:first_child).and_return(nil)
 
       node = double("Node")
-      allow(node).to receive(:walk).and_yield(code_node)
+      allow(node).to receive(:type).and_return(:paragraph)
+      allow(node).to receive(:merge_type).and_return(:paragraph)
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :children, :first_child].include?(m) }
+      allow(node).to receive(:children).and_return([code_node])
 
       result = algorithm.send(:extract_text_content, node)
       expect(result).to eq("puts")
     end
 
     it "concatenates multiple text nodes" do
-      text1 = double("Text1", type: :text, string_content: "Hello ")
-      text2 = double("Text2", type: :text, string_content: "World")
+      text1 = double("Text1")
+      allow(text1).to receive(:type).and_return(:text)
+      allow(text1).to receive(:merge_type).and_return(:text)
+      allow(text1).to receive(:string_content).and_return("Hello ")
+      allow(text1).to receive(:respond_to?) { |m, *| [:type, :merge_type, :string_content, :children, :first_child].include?(m) }
+      allow(text1).to receive(:children).and_return([])
+      allow(text1).to receive(:first_child).and_return(nil)
+
+      text2 = double("Text2")
+      allow(text2).to receive(:type).and_return(:text)
+      allow(text2).to receive(:merge_type).and_return(:text)
+      allow(text2).to receive(:string_content).and_return("World")
+      allow(text2).to receive(:respond_to?) { |m, *| [:type, :merge_type, :string_content, :children, :first_child].include?(m) }
+      allow(text2).to receive(:children).and_return([])
+      allow(text2).to receive(:first_child).and_return(nil)
 
       node = double("Node")
-      allow(node).to receive(:walk).and_yield(text1).and_yield(text2)
+      allow(node).to receive(:type).and_return(:paragraph)
+      allow(node).to receive(:merge_type).and_return(:paragraph)
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type, :children, :first_child].include?(m) }
+      allow(node).to receive(:children).and_return([text1, text2])
 
       result = algorithm.send(:extract_text_content, node)
       expect(result).to eq("Hello World")

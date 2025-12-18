@@ -4,14 +4,29 @@
 # URL parsing with Unicode support (falls back to URI if not available)
 gem "addressable", ">= 2.8", "< 3" # ruby >= 2.2
 
-# Ruby parsing for advanced templating
-# Inner-merge dependencies for CodeBlockMerger
-# These are loaded on-demand when merging fenced code blocks
-gem "bash-merge", path: "../../../bash-merge"         # dotenv code blocks
-gem "dotenv-merge", path: "../../../dotenv-merge"     # dotenv code blocks
-gem "json-merge", path: "../../../json-merge"         # JSON code blocks
-gem "jsonc-merge", path: "../../../jsonc-merge"       # JSONC code blocks
-gem "prism-merge", path: "../../../prism-merge"       # Ruby code blocks
-gem "psych-merge", path: "../../../psych-merge"       # YAML code blocks
-gem "rbs-merge", path: "../../../rbs-merge"           # RBS code blocks
-gem "toml-merge", path: "../../../toml-merge"
+# required for citrus / toml-rb to provide TOML integrated parsing within Markdown docs.
+gem "citrus"
+gem "toml-rb"
+
+# AST parsing for advanced templating
+if ENV.fetch("KETTLE_RB_DEV", "false").casecmp?("true")
+  # Inner-merge dependencies for CodeBlockMerger
+  # These are loaded on-demand when merging fenced code blocks
+  gem "bash-merge", path: "../../../bash-merge"         # dotenv code blocks
+  gem "dotenv-merge", path: "../../../dotenv-merge"     # dotenv code blocks
+  gem "json-merge", path: "../../../json-merge"         # JSON code blocks
+  gem "jsonc-merge", path: "../../../jsonc-merge"       # JSONC code blocks
+  gem "prism-merge", path: "../../../prism-merge"       # Ruby code blocks
+  gem "psych-merge", path: "../../../psych-merge"       # YAML code blocks
+  gem "rbs-merge", path: "../../../rbs-merge"           # RBS code blocks
+  gem "toml-merge", path: "../../../toml-merge"         # TOML code blocks
+else
+  gem "bash-merge"      # dotenv code blocks
+  gem "dotenv-merge"    # dotenv code blocks
+  gem "json-merge"      # JSON code blocks
+  gem "jsonc-merge"     # JSONC code blocks
+  gem "prism-merge"     # Ruby code blocks
+  gem "psych-merge"     # YAML code blocks
+  gem "rbs-merge"       # RBS code blocks
+  gem "toml-merge"      # TOML code blocks
+end

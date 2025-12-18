@@ -315,37 +315,34 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
     def create_resolver_node(name, content: "content")
       node = double(name)
       allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-      allow(node).to receive(:respond_to?).and_return(false)
-      allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
-      allow(node).to receive(:respond_to?).with(:typed_node?).and_return(false)
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
-      allow(node).to receive(:respond_to?).with(:source_position).and_return(true)
-      allow(node).to receive(:respond_to?).with(:to_commonmark).and_return(true)
       allow(node).to receive(:type).and_return(:paragraph)
       allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
       allow(node).to receive(:to_commonmark).and_return(content)
+      # Flexible respond_to? that handles all method checks
+      allow(node).to receive(:respond_to?) { |m, *| [:type, :source_position, :to_commonmark].include?(m) }
       node
     end
 
     describe "#code_block_node?" do
       it "returns false for non-code-block nodes" do
-        node = double("Node", type: :paragraph)
-        allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
-        allow(node).to receive(:respond_to?).with(:type).and_return(true)
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:paragraph)
+        allow(node).to receive(:respond_to?) { |m, *| [:type].include?(m) }
         expect(merger.send(:code_block_node?, node)).to be(false)
       end
 
       it "returns true for code_block type" do
-        node = double("Node", type: :code_block)
-        allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
-        allow(node).to receive(:respond_to?).with(:type).and_return(true)
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:code_block)
+        allow(node).to receive(:respond_to?) { |m, *| [:type].include?(m) }
         expect(merger.send(:code_block_node?, node)).to be(true)
       end
 
       it "returns false for frozen nodes even if code_block type" do
-        node = double("Node", type: :code_block)
-        allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(true)
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:code_block)
         allow(node).to receive(:freeze_node?).and_return(true)
+        allow(node).to receive(:respond_to?) { |m, *| [:type, :freeze_node?].include?(m) }
         expect(merger.send(:code_block_node?, node)).to be(false)
       end
     end
@@ -483,19 +480,15 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
           dest_node = double("FrozenDestNode")
           allow(dest_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-          allow(dest_node).to receive(:respond_to?).and_return(false)
-          allow(dest_node).to receive(:respond_to?).with(:freeze_node?).and_return(true)
           allow(dest_node).to receive(:freeze_node?).and_return(true)
-          allow(dest_node).to receive(:respond_to?).with(:typed_node?).and_return(false)
-          allow(dest_node).to receive(:respond_to?).with(:type).and_return(true)
-          allow(dest_node).to receive(:respond_to?).with(:source_position).and_return(true)
-          allow(dest_node).to receive(:respond_to?).with(:to_commonmark).and_return(true)
           allow(dest_node).to receive(:source_position).and_return({start_line: 5, end_line: 10})
           allow(dest_node).to receive(:to_commonmark).and_return("frozen content")
           allow(dest_node).to receive(:start_line).and_return(5)
           allow(dest_node).to receive(:end_line).and_return(10)
           allow(dest_node).to receive(:reason).and_return("frozen reason")
           allow(dest_node).to receive(:type).and_return(:paragraph)
+          # Flexible respond_to? that handles all method checks
+          allow(dest_node).to receive(:respond_to?) { |m, *| [:freeze_node?, :type, :source_position, :to_commonmark, :start_line, :end_line, :reason].include?(m) }
 
           allow(dest_analysis).to receive(:source_range).and_return("frozen content")
 
@@ -816,18 +809,14 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       template_node = double("TemplateNode")
       allow(template_node).to receive(:fence_info).and_return("ruby")
       allow(template_node).to receive(:string_content).and_return("puts 'a'")
-      allow(template_node).to receive(:respond_to?).with(:fence_info).and_return(true)
-      allow(template_node).to receive(:respond_to?).with(:type).and_return(true)
-      allow(template_node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
       allow(template_node).to receive(:type).and_return(:code_block)
+      allow(template_node).to receive(:respond_to?) { |m, *| [:fence_info, :type, :string_content].include?(m) }
 
       dest_node = double("DestNode")
       allow(dest_node).to receive(:fence_info).and_return("ruby")
       allow(dest_node).to receive(:string_content).and_return("invalid {{{{")
-      allow(dest_node).to receive(:respond_to?).with(:fence_info).and_return(true)
-      allow(dest_node).to receive(:respond_to?).with(:type).and_return(true)
-      allow(dest_node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
       allow(dest_node).to receive(:type).and_return(:code_block)
+      allow(dest_node).to receive(:respond_to?) { |m, *| [:fence_info, :type, :string_content].include?(m) }
 
       stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0, inner_merges: 0}
 

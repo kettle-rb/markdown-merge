@@ -32,15 +32,23 @@ RSpec.describe Markdown::Merge::TableMatchRefiner do
     def create_mock_table(type_value = :table)
       node = double("TableNode")
       allow(node).to receive(:type).and_return(type_value)
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(node).to receive(:merge_type).and_return(type_value)
       allow(node).to receive(:first_child).and_return(nil)
+      # Handle all respond_to? calls - return true for type/merge_type, false for typed_node?
+      allow(node).to receive(:respond_to?) do |method_name, *|
+        [:type, :merge_type].include?(method_name)
+      end
       node
     end
 
     def create_non_table_node(type_value = :paragraph)
       node = double("NonTableNode")
       allow(node).to receive(:type).and_return(type_value)
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(node).to receive(:merge_type).and_return(type_value)
+      # Handle all respond_to? calls - return true for type/merge_type, false for typed_node?
+      allow(node).to receive(:respond_to?) do |method_name, *|
+        [:type, :merge_type].include?(method_name)
+      end
       node
     end
 
@@ -126,22 +134,24 @@ RSpec.describe Markdown::Merge::TableMatchRefiner do
     describe "#table_node?" do
       it "returns true for node with :table type" do
         node = double("Node")
-        allow(node).to receive(:respond_to?).with(:type).and_return(true)
         allow(node).to receive(:type).and_return(:table)
+        allow(node).to receive(:merge_type).and_return(:table)
+        allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
         expect(refiner.send(:table_node?, node)).to be(true)
       end
 
       it "returns true for node with Table in class name" do
         node = double("Markdown::Table")
-        allow(node).to receive(:respond_to?).with(:type).and_return(false)
+        allow(node).to receive(:respond_to?) { |m, *| false }
         allow(node.class).to receive(:name).and_return("Markdown::Table")
         expect(refiner.send(:table_node?, node)).to be(true)
       end
 
       it "returns false for non-table nodes" do
         node = double("Paragraph")
-        allow(node).to receive(:respond_to?).with(:type).and_return(true)
         allow(node).to receive(:type).and_return(:paragraph)
+        allow(node).to receive(:merge_type).and_return(:paragraph)
+        allow(node).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
         allow(node.class).to receive(:name).and_return("Markdown::Paragraph")
         expect(refiner.send(:table_node?, node)).to be(false)
       end
@@ -150,12 +160,14 @@ RSpec.describe Markdown::Merge::TableMatchRefiner do
     describe "#extract_tables" do
       it "filters out non-table nodes" do
         table = double("Table")
-        allow(table).to receive(:respond_to?).with(:type).and_return(true)
         allow(table).to receive(:type).and_return(:table)
+        allow(table).to receive(:merge_type).and_return(:table)
+        allow(table).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
 
         paragraph = double("Paragraph")
-        allow(paragraph).to receive(:respond_to?).with(:type).and_return(true)
         allow(paragraph).to receive(:type).and_return(:paragraph)
+        allow(paragraph).to receive(:merge_type).and_return(:paragraph)
+        allow(paragraph).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
         allow(paragraph.class).to receive(:name).and_return("Paragraph")
 
         nodes = [table, paragraph, table]
@@ -186,12 +198,14 @@ RSpec.describe Markdown::Merge::TableMatchRefiner do
     it "returns fewer matches with high threshold" do
       table_a = double("TableA")
       allow(table_a).to receive(:type).and_return(:table)
-      allow(table_a).to receive(:respond_to?).with(:type).and_return(true)
+      allow(table_a).to receive(:merge_type).and_return(:table)
+      allow(table_a).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
       allow(table_a).to receive(:first_child).and_return(nil)
 
       table_b = double("TableB")
       allow(table_b).to receive(:type).and_return(:table)
-      allow(table_b).to receive(:respond_to?).with(:type).and_return(true)
+      allow(table_b).to receive(:merge_type).and_return(:table)
+      allow(table_b).to receive(:respond_to?) { |m, *| [:type, :merge_type].include?(m) }
       allow(table_b).to receive(:first_child).and_return(nil)
 
       high_result = high_threshold_refiner.call([table_a], [table_b])

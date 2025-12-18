@@ -24,6 +24,9 @@ end
 # this library
 require "markdown/merge"
 
+# Support files (including dependency tags for conditional test execution)
+Dir[File.join(__dir__, "support", "**", "*.rb")].each { |f| require f }
+
 RSpec.configure do |config|
   config.before do
     # Speed up polling loops

@@ -54,22 +54,38 @@
 
 ## 🌻 Synopsis
 
-Markdown::Merge is a **shared foundation** for intelligent Markdown file merging. It provides base classes and utilities that parser-specific implementations use to merge Markdown documents by understanding their structure.
+Markdown::Merge provides **intelligent Markdown file merging** using tree_haver backends. It can be used standalone or through parser-specific wrappers.
 
-**Important:** This gem is not typically used directly. Instead, use one of the parser-specific implementations:
+**Direct usage** (with auto-detected or specified backend):
 
-- [commonmarker-merge][commonmarker-merge] - Uses Comrak (Rust) for parsing
-- [markly-merge][markly-merge] - Uses libcmark-gfm (C) for parsing
+```ruby
+require "markdown/merge"
+
+# Auto-detect available backend (commonmarker or markly)
+merger = Markdown::Merge::SmartMerger.new(template_content, dest_content)
+result = merger.merge
+
+# Or specify a backend explicitly
+merger = Markdown::Merge::SmartMerger.new(template_content, dest_content, backend: :markly)
+```
+
+**Via parser-specific wrappers** (for hard dependencies and backend-specific defaults):
+
+- [commonmarker-merge][commonmarker-merge] - Uses Comrak (Rust) via Commonmarker
+- [markly-merge][markly-merge] - Uses libcmark-gfm (C) via Markly
 
 ### Key Features
 
-- **Parser-Agnostic Base Classes**: Provides `SmartMergerBase`, `FileAnalysisBase`, and other foundation components
+- **Multiple Backends**: Supports Commonmarker and Markly through tree_haver's unified API
+- **Type Normalization**: Canonical node types (`:heading`, `:paragraph`, etc.) work across all backends
+- **Extensible**: Register custom backends via `NodeTypeNormalizer.register_backend`
 - **Structure-Aware**: Understands headings, paragraphs, lists, code blocks, tables, and other block elements
 - **Freeze Block Support**: Respects freeze markers (default: `markdown-merge:freeze` / `markdown-merge:unfreeze`) for template merge control - customizable to match your project's conventions
 - **Inner-Merge Code Blocks**: Optionally merge fenced code blocks using language-specific mergers (Ruby → prism-merge, YAML → psych-merge, JSON → json-merge, TOML → toml-merge)
 - **Table Match Refiner**: Fuzzy matching algorithm for tables with similar but not identical headers
 - **Full Provenance**: Tracks origin of every node
 - **Customizable**:
+  - `backend` - select `:commonmarker`, `:markly`, or `:auto`
   - `signature_generator` - callable custom signature generators
   - `preference` - setting of `:template`, `:destination`, or a Hash for per-node-type preferences
   - `add_template_only_nodes` - setting to retain sections that do not exist in destination
@@ -256,19 +272,22 @@ NOTE: Be prepared to track down certs for signed gems and add them the same way 
 
 ## ⚙️ Configuration
 
-This section documents configuration options available to parser-specific implementations.
-End users should refer to [commonmarker-merge](https://github.com/kettle-rb/commonmarker-merge)
-or [markly-merge](https://github.com/kettle-rb/markly-merge) documentation for usage.
+### SmartMerger Configuration
 
-### SmartMergerBase Configuration
-
-The `SmartMergerBase` class accepts the following configuration options:
+The `SmartMerger` class is the main entry point for merging Markdown files:
 
 ```ruby
-# Configuration options available to subclasses
-merger = SomeParser::Merge::SmartMerger.new(
+require "markdown/merge"
+
+merger = Markdown::Merge::SmartMerger.new(
   template_content,
   dest_content,
+
+  # Backend selection (default: :auto)
+  # :auto - auto-detect available backend (tries commonmarker first, then markly)
+  # :commonmarker - use Commonmarker (comrak Rust parser)
+  # :markly - use Markly (cmark-gfm C library)
+  backend: :auto,
 
   # Which version to prefer when nodes match but differ
   # :destination (default) - keep destination content (preserves customizations)
@@ -297,10 +316,48 @@ merger = SomeParser::Merge::SmartMerger.new(
   match_refiner: nil,
 
   # Custom signature generator (optional)
-  # Receives a node, returns a signature array or nil
+  # Receives a node (wrapped with canonical merge_type), returns a signature array or nil
   # Return the node itself to fall through to default signature
   signature_generator: nil,
+
+  # Backend-specific options (passed through to parser)
+  # For commonmarker: options: {}
+  # For markly: flags: Markly::DEFAULT, extensions: [:table]
 )
+```
+
+### Node Type Normalization
+
+markdown-merge normalizes node types across backends so merge rules are portable:
+
+```ruby
+# These are equivalent regardless of backend
+# Markly's :header becomes :heading
+# Markly's :hrule becomes :thematic_break
+# etc.
+
+# Register a custom backend's type mappings
+Markdown::Merge::NodeTypeNormalizer.register_backend(:my_parser, {
+  h1: :heading,
+  h2: :heading,
+  para: :paragraph,
+  # ...
+})
+```
+
+### Parser-Specific Wrappers
+
+For convenience, parser-specific wrappers provide backend-specific defaults:
+
+```ruby
+# commonmarker-merge (freeze_token: "commonmarker-merge", inner_merge_code_blocks: false)
+require "commonmarker/merge"
+merger = Commonmarker::Merge::SmartMerger.new(template, dest, options: {})
+
+# markly-merge (freeze_token: "markly-merge", inner_merge_code_blocks: true)
+require "markly/merge"
+merger = Markly::Merge::SmartMerger.new(template, dest, flags: Markly::DEFAULT, extensions: [:table])
+```
 ```
 
 ### Freeze Blocks

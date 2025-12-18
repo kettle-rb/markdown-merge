@@ -430,7 +430,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
     it "returns true for parser nodes (with :type method)" do
       parser_node = double("ParserNode")
       allow(parser_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-      allow(parser_node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(parser_node).to receive(:respond_to?) { |m, *| [:type].include?(m) }
 
       expect(analysis.fallthrough_node?(parser_node)).to be(true)
     end
@@ -446,7 +446,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
 
     it "returns true for objects with :type method" do
       node = double("Node")
-      allow(node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(node).to receive(:respond_to?) { |m, *| [:type].include?(m) }
       expect(analysis.parser_node?(node)).to be(true)
     end
 

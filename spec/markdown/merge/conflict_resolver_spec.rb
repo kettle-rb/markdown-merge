@@ -5,13 +5,18 @@ RSpec.describe Markdown::Merge::ConflictResolver do
   def create_mock_node(name, content: "content", frozen: false, reason: nil)
     node = double(name)
     allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(frozen)
-    allow(node).to receive(:respond_to?).and_return(false)
-    allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(frozen)
-    allow(node).to receive(:respond_to?).with(:typed_node?).and_return(false)
-    allow(node).to receive(:respond_to?).with(:source_position).and_return(true)
-    allow(node).to receive(:respond_to?).with(:to_commonmark).and_return(true)
     allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
     allow(node).to receive(:to_commonmark).and_return(content)
+
+    # Flexible respond_to? that handles all method checks
+    known_methods = [:source_position, :to_commonmark]
+    known_methods << :freeze_node? if frozen
+    known_methods << :reason if frozen
+    known_methods << :full_text if frozen
+
+    allow(node).to receive(:respond_to?) do |method_name, *|
+      known_methods.include?(method_name)
+    end
 
     if frozen
       allow(node).to receive(:freeze_node?).and_return(true)

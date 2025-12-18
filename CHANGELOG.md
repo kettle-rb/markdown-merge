@@ -20,8 +20,6 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Added
 
-- Initial release
-
 ### Changed
 
 ### Deprecated
@@ -31,6 +29,33 @@ Please file a bug if you notice a violation of semantic versioning.
 ### Fixed
 
 ### Security
+
+## [1.0.0] - 2024-12-17
+
+### Added
+
+- Initial release of markdown-merge
+- Central hub for markdown merging with tree_haver backends
+- `Markdown::Merge::SmartMerger` - standalone merger supporting multiple backends
+- `Markdown::Merge::FileAnalysis` - file analysis using tree_haver
+- `Markdown::Merge::Backends` - backend constants (`:commonmarker`, `:markly`, `:auto`)
+- `Markdown::Merge::NodeTypeNormalizer` - extensible node type normalization
+  - Canonical types: `:heading`, `:paragraph`, `:code_block`, `:list`, `:block_quote`, `:thematic_break`, `:html_block`, `:table`, `:footnote_definition`
+  - Register custom backends via `NodeTypeNormalizer.register_backend`
+- Base classes for parser-specific implementations:
+  - `Markdown::Merge::SmartMergerBase`
+  - `Markdown::Merge::FileAnalysisBase`
+  - `Markdown::Merge::FreezeNode`
+- Freeze block support with configurable tokens
+- Inner-merge support for fenced code blocks
+- Table matching algorithms
+- Comprehensive test suite
+
+### Dependencies
+
+- `ast-merge` (~> 1.0) - shared merge infrastructure
+- `tree_haver` (~> 3.0) - unified markdown parsing
+- `version_gem` (~> 1.1)
 
 [Unreleased]: https://github.com/kettle-rb/markdown-merge/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/kettle-rb/markdown-merge/compare/76f2230840b236dd10fdd7baf322c082762dddb0...v1.0.0

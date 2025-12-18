@@ -137,6 +137,11 @@ module Markdown
           end
         rescue LoadError => e
           not_merged("merger gem not available: #{e.message}")
+        rescue TreeHaver::Error => e
+          # TreeHaver::NotAvailable and TreeHaver::Error inherit from Exception (not StandardError)
+          # for safety reasons related to backend conflicts. We catch them here to handle
+          # gracefully when a backend isn't properly configured.
+          not_merged("backend not available: #{e.message}")
         rescue StandardError => e
           # :nocov: defensive - Prism::Merge::ParseError handling when prism/merge is loaded
           # Check for Prism::Merge::ParseError if prism/merge is loaded

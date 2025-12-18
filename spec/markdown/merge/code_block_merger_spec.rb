@@ -526,18 +526,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       end
     end
 
-    describe ".merge_with_toml" do
-      before do
-        skip "toml/merge not available" unless toml_merge_available?
-      end
-
-      def toml_merge_available?
-        require "toml/merge"
-        true
-      rescue LoadError
-        false
-      end
-
+    describe ".merge_with_toml", :toml_merge do
       it "responds to merge_with_toml" do
         expect(described_class).to respond_to(:merge_with_toml)
       end
