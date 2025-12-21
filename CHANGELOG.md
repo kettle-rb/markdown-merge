@@ -28,6 +28,13 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Fixed
 
+- `SmartMergerBase#apply_node_typing` now correctly calls custom `node_typing` lambdas
+  even when nodes are pre-wrapped with canonical types by `NodeTypeNormalizer`.
+  Previously, the method returned early when nodes were already typed, preventing
+  custom lambdas from refining or overriding the canonical `merge_type`.
+  This fix enables the `node_typing` + Hash `preference` pattern to work correctly
+  for per-node-type merge preferences (e.g., `{ default: :destination, gem_family_table: :template }`).
+
 ### Security
 
 ## [1.0.0] - 2024-12-17

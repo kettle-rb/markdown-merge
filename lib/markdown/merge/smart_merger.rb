@@ -102,6 +102,9 @@ module Markdown
       #   unmatched nodes. Default: nil (fuzzy matching disabled).
       #   Set to TableMatchRefiner.new to enable fuzzy table matching.
       #
+      # @param node_typing [Hash{Symbol,String => #call}, nil] Node typing configuration
+      #   for per-node-type merge preferences. Maps node type names to callables.
+      #
       # @param parser_options [Hash] Backend-specific parser options.
       #   For commonmarker: { options: {} }
       #   For markly: { flags: Markly::DEFAULT, extensions: [:table] }
@@ -118,6 +121,7 @@ module Markdown
         inner_merge_code_blocks: false,
         freeze_token: FileAnalysis::DEFAULT_FREEZE_TOKEN,
         match_refiner: nil,
+        node_typing: nil,
         **parser_options
       )
         Backends.validate!(backend)
@@ -133,6 +137,7 @@ module Markdown
           inner_merge_code_blocks: inner_merge_code_blocks,
           freeze_token: freeze_token,
           match_refiner: match_refiner,
+          node_typing: node_typing,
           # Pass through for FileAnalysis
           backend: backend,
           **parser_options,

@@ -56,6 +56,9 @@ module Markdown
       # @return [CodeBlockMerger, nil] Merger for fenced code blocks
       attr_reader :code_block_merger
 
+      # @return [Hash{Symbol,String => #call}, nil] Node typing configuration
+      attr_reader :node_typing
+
       # Creates a new SmartMerger for intelligent Markdown file merging.
       #
       # @param template_content [String] Template Markdown source code
@@ -67,10 +70,11 @@ module Markdown
       #   - `nil` to indicate the node should have no signature
       #   - The original node to fall through to default signature computation
       #
-      # @param preference [Symbol] Controls which version to use when nodes
+      # @param preference [Symbol, Hash] Controls which version to use when nodes
       #   have matching signatures but different content:
       #   - `:destination` (default) - Use destination version (preserves customizations)
       #   - `:template` - Use template version (applies updates)
+      #   - Hash for per-type preferences: `{ default: :destination, gem_table: :template }`
       #
       # @param add_template_only_nodes [Boolean] Controls whether to add nodes that only
       #   exist in template:
@@ -90,6 +94,24 @@ module Markdown
       #   unmatched nodes. Default: nil (fuzzy matching disabled).
       #   Set to TableMatchRefiner.new to enable fuzzy table matching.
       #
+      # @param node_typing [Hash{Symbol,String => #call}, nil] Node typing configuration
+      #   for per-node-type merge preferences. Maps node type names to callables that
+      #   can wrap nodes with custom merge_types for use with Hash-based preference.
+      #   @example
+      #     node_typing = {
+      #       table: ->(node) {
+      #         text = node.to_plaintext
+      #         if text.include?("tree_haver")
+      #           Ast::Merge::NodeTyping.with_merge_type(node, :gem_family_table)
+      #         else
+      #           node
+      #         end
+      #       }
+      #     }
+      #     merger = SmartMerger.new(template, dest,
+      #       node_typing: node_typing,
+      #       preference: { default: :destination, gem_family_table: :template })
+      #
       # @param parser_options [Hash] Additional parser-specific options
       #
       # @raise [TemplateParseError] If template has syntax errors
@@ -103,11 +125,16 @@ module Markdown
         inner_merge_code_blocks: false,
         freeze_token: FileAnalysisBase::DEFAULT_FREEZE_TOKEN,
         match_refiner: nil,
+        node_typing: nil,
         **parser_options
       )
         @preference = preference
         @add_template_only_nodes = add_template_only_nodes
         @match_refiner = match_refiner
+        @node_typing = node_typing
+
+        # Validate node_typing if provided
+        Ast::Merge::NodeTyping.validate!(node_typing) if node_typing
 
         # Set up code block merger
         @code_block_merger = case inner_merge_code_blocks
@@ -268,8 +295,8 @@ module Markdown
       # @param stats [Hash] Statistics hash to update
       # @return [Array] [content_string, frozen_block_info]
       def process_match(entry, stats)
-        template_node = entry[:template_node]
-        dest_node = entry[:dest_node]
+        template_node = apply_node_typing(entry[:template_node])
+        dest_node = apply_node_typing(entry[:dest_node])
 
         # Try inner-merge for code blocks first
         if @code_block_merger && code_block_node?(template_node) && code_block_node?(dest_node)
@@ -286,22 +313,63 @@ module Markdown
 
         frozen_info = nil
 
+        # Use unwrapped node for source extraction
+        raw_template_node = Ast::Merge::NodeTyping.unwrap(template_node)
+        raw_dest_node = Ast::Merge::NodeTyping.unwrap(dest_node)
+
         content = case resolution[:source]
         when :template
           stats[:nodes_modified] += 1 if resolution[:decision] != :identical
-          node_to_source(template_node, @template_analysis)
+          node_to_source(raw_template_node, @template_analysis)
         when :destination
-          if dest_node.respond_to?(:freeze_node?) && dest_node.freeze_node?
+          if raw_dest_node.respond_to?(:freeze_node?) && raw_dest_node.freeze_node?
             frozen_info = {
-              start_line: dest_node.start_line,
-              end_line: dest_node.end_line,
-              reason: dest_node.reason,
+              start_line: raw_dest_node.start_line,
+              end_line: raw_dest_node.end_line,
+              reason: raw_dest_node.reason,
             }
           end
-          node_to_source(dest_node, @dest_analysis)
+          node_to_source(raw_dest_node, @dest_analysis)
         end
 
         [content, frozen_info]
+      end
+
+      # Apply node typing to a node if node_typing is configured.
+      #
+      # For markdown nodes, this supports matching by:
+      # 1. Node class name (standard NodeTyping behavior)
+      # 2. Canonical node type (e.g., :heading, :table, :paragraph)
+      #
+      # Note: Markdown nodes are pre-wrapped with canonical merge_type by
+      # NodeTypeNormalizer during parsing. This method allows custom node_typing
+      # to override or refine that canonical type.
+      #
+      # @param node [Object] The node to potentially wrap with merge_type
+      # @return [Object] The node, possibly wrapped with NodeTyping::Wrapper
+      def apply_node_typing(node)
+        return node unless @node_typing
+        return node unless node
+
+        # For markdown nodes, check if there's a custom callable for the canonical type.
+        # This takes precedence because nodes are pre-wrapped by NodeTypeNormalizer.
+        if node.respond_to?(:type)
+          canonical_type = node.type
+          callable = @node_typing[canonical_type] ||
+            @node_typing[canonical_type.to_s] ||
+            @node_typing[canonical_type.to_sym]
+          if callable
+            # Call the custom lambda - it may return a refined typed node
+            # or the original node unchanged
+            return callable.call(node)
+          end
+        end
+
+        # Fall back to standard class-name-based matching
+        result = Ast::Merge::NodeTyping.process(node, @node_typing)
+        return result if Ast::Merge::NodeTyping.typed_node?(result)
+
+        node
       end
 
       # Check if a node is a code block.
