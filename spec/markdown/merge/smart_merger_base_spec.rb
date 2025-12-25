@@ -308,6 +308,93 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
     end
   end
 
+  describe "#apply_node_typing" do
+    context "without node_typing configured" do
+      let(:merger) { test_merger_class.new("# Test", "# Test") }
+
+      it "returns the node unchanged" do
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:paragraph)
+
+        result = merger.send(:apply_node_typing, node)
+        expect(result).to eq(node)
+      end
+    end
+
+    context "with nil node" do
+      let(:node_typing) { {paragraph: ->(n) { n }} }
+      let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
+
+      it "returns nil" do
+        result = merger.send(:apply_node_typing, nil)
+        expect(result).to be_nil
+      end
+    end
+
+    context "with node_typing configured using symbol key" do
+      let(:custom_wrapper) { double("CustomWrapper") }
+      let(:node_typing) { {paragraph: ->(n) { custom_wrapper }} }
+      let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
+
+      it "calls the callable for matching symbol type" do
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:paragraph)
+        allow(node).to receive(:respond_to?).with(:type).and_return(true)
+
+        result = merger.send(:apply_node_typing, node)
+        expect(result).to eq(custom_wrapper)
+      end
+    end
+
+    context "with node_typing configured using string key" do
+      let(:custom_wrapper) { double("CustomWrapper") }
+      let(:node_typing) { {"paragraph" => ->(n) { custom_wrapper }} }
+      let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
+
+      it "calls the callable for matching string type" do
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:paragraph)
+        allow(node).to receive(:respond_to?).with(:type).and_return(true)
+
+        result = merger.send(:apply_node_typing, node)
+        expect(result).to eq(custom_wrapper)
+      end
+    end
+
+    context "with node that doesn't respond to type" do
+      let(:node_typing) { {paragraph: ->(n) { n }} }
+      let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
+
+      it "falls back to standard NodeTyping.process" do
+        node = double("Node")
+        # Must handle all respond_to? calls that NodeTyping.process might make
+        allow(node).to receive(:respond_to?) { |m, *| false }
+        allow(node).to receive(:class).and_return(Class.new { def self.name; "TestNode"; end })
+
+        result = merger.send(:apply_node_typing, node)
+        # Should return original node since NodeTyping.process won't wrap it
+        expect(result).to eq(node)
+      end
+    end
+
+    context "with non-matching type" do
+      let(:node_typing) { {heading: ->(n) { n }} }
+      let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
+
+      it "falls back to standard NodeTyping.process" do
+        node = double("Node")
+        allow(node).to receive(:type).and_return(:paragraph)
+        # Must handle all respond_to? calls including typed_node? check
+        allow(node).to receive(:respond_to?) { |m, *| m == :type }
+        allow(node).to receive(:class).and_return(Class.new { def self.name; "TestNode"; end })
+
+        result = merger.send(:apply_node_typing, node)
+        # Should return original node since no match
+        expect(result).to eq(node)
+      end
+    end
+  end
+
   describe "private methods" do
     let(:merger) { test_merger_class.new("# Test", "# Test") }
 

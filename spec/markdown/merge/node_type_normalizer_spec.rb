@@ -1,3 +1,4 @@
+
 # frozen_string_literal: true
 
 RSpec.describe Markdown::Merge::NodeTypeNormalizer do
@@ -52,6 +53,10 @@ RSpec.describe Markdown::Merge::NodeTypeNormalizer do
   end
 
   describe ".canonical_type" do
+    it "returns nil for nil type" do
+      expect(described_class.canonical_type(nil, :markly)).to be_nil
+    end
+
     it "returns the canonical type for known mappings" do
       expect(described_class.canonical_type(:header, :markly)).to eq(:heading)
     end

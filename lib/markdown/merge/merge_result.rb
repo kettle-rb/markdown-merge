@@ -30,11 +30,13 @@ module Markdown
       # @param conflicts [Array<Hash>] Conflict descriptions
       # @param frozen_blocks [Array<Hash>] Preserved frozen block info
       # @param stats [Hash] Merge statistics
-      def initialize(content:, conflicts: [], frozen_blocks: [], stats: {})
+      # @param options [Hash] Additional options for forward compatibility
+      def initialize(content:, conflicts: [], frozen_blocks: [], stats: {}, **options)
         super(
           conflicts: conflicts,
           frozen_blocks: frozen_blocks,
-          stats: default_stats.merge(stats)
+          stats: default_stats.merge(stats),
+          **options
         )
         @content_raw = content
       end

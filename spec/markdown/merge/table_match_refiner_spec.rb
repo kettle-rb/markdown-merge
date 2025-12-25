@@ -155,6 +155,58 @@ RSpec.describe Markdown::Merge::TableMatchRefiner do
         allow(node.class).to receive(:name).and_return("Markdown::Paragraph")
         expect(refiner.send(:table_node?, node)).to be(false)
       end
+
+      context "with typed wrapper node" do
+        it "returns true when merge_type is :table" do
+          # Simulate Ast::Merge::NodeTyping.typed_node? returning true
+          wrapper = Ast::Merge::NodeTyping::Wrapper.new(double("RawTable"), :table)
+          expect(refiner.send(:table_node?, wrapper)).to be(true)
+        end
+
+        it "returns false when merge_type is not :table" do
+          wrapper = Ast::Merge::NodeTyping::Wrapper.new(double("RawParagraph"), :paragraph)
+          expect(refiner.send(:table_node?, wrapper)).to be(false)
+        end
+      end
+
+      context "with raw type as string" do
+        it "returns true when type is 'table' string" do
+          node = double("StringTypeNode")
+          allow(node).to receive(:type).and_return("table")
+          allow(node).to receive(:merge_type).and_return(nil)
+          allow(node).to receive(:respond_to?) do |m, *|
+            m == :type || (m == :merge_type)
+          end
+          expect(refiner.send(:table_node?, node)).to be(true)
+        end
+
+        it "returns false when type is other string" do
+          node = double("StringTypeNode")
+          allow(node).to receive(:type).and_return("paragraph")
+          allow(node).to receive(:merge_type).and_return(nil)
+          allow(node).to receive(:respond_to?) do |m, *|
+            m == :type || (m == :merge_type)
+          end
+          allow(node.class).to receive(:name).and_return("Node")
+          expect(refiner.send(:table_node?, node)).to be(false)
+        end
+      end
+
+      context "with node that doesn't respond to type or merge_type" do
+        it "falls back to class name check" do
+          node = double("UnknownTableNode")
+          allow(node).to receive(:respond_to?) { |m, *| false }
+          allow(node.class).to receive(:name).and_return("SomeTableClass")
+          expect(refiner.send(:table_node?, node)).to be(true)
+        end
+
+        it "returns false when class name doesn't include Table" do
+          node = double("UnknownNode")
+          allow(node).to receive(:respond_to?) { |m, *| false }
+          allow(node.class).to receive(:name).and_return("SomeOtherClass")
+          expect(refiner.send(:table_node?, node)).to be(false)
+        end
+      end
     end
 
     describe "#extract_tables" do

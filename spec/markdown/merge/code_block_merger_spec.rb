@@ -258,6 +258,25 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       end
     end
 
+    context "when merger raises TreeHaver::Error" do
+      let(:tree_haver_error_merger) do
+        described_class.new(
+          mergers: {
+            "treehaver" => ->(t, d, p, **) { raise TreeHaver::NotAvailable, "tree-sitter not found" },
+          },
+        )
+      end
+
+      it "handles TreeHaver::Error gracefully" do
+        template = create_code_node(language: "treehaver", content: "a")
+        dest = create_code_node(language: "treehaver", content: "b")
+
+        result = tree_haver_error_merger.merge_code_blocks(template, dest, preference: :destination)
+        expect(result[:merged]).to be(false)
+        expect(result[:reason]).to include("backend not available")
+      end
+    end
+
     context "when merger returns nil reason" do
       let(:nil_reason_merger) do
         described_class.new(
@@ -417,18 +436,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
   end
 
   describe "class methods" do
-    describe ".merge_with_prism" do
-      before do
-        skip "prism/merge not available" unless prism_merge_available?
-      end
-
-      def prism_merge_available?
-        require "prism/merge"
-        true
-      rescue LoadError
-        false
-      end
-
+    describe ".merge_with_prism", :prism_merge do
       it "responds to merge_with_prism" do
         expect(described_class).to respond_to(:merge_with_prism)
       end
@@ -452,18 +460,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       end
     end
 
-    describe ".merge_with_psych" do
-      before do
-        skip "psych/merge not available" unless psych_merge_available?
-      end
-
-      def psych_merge_available?
-        require "psych/merge"
-        true
-      rescue LoadError
-        false
-      end
-
+    describe ".merge_with_psych", :psych_merge do
       it "responds to merge_with_psych" do
         expect(described_class).to respond_to(:merge_with_psych)
       end
@@ -487,18 +484,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       end
     end
 
-    describe ".merge_with_json" do
-      before do
-        skip "json/merge not available" unless json_merge_available?
-      end
-
-      def json_merge_available?
-        require "json/merge"
-        true
-      rescue LoadError
-        false
-      end
-
+    describe ".merge_with_json", :json_merge do
       it "responds to merge_with_json" do
         expect(described_class).to respond_to(:merge_with_json)
       end

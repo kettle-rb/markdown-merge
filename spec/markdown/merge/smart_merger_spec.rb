@@ -144,11 +144,182 @@ RSpec.describe Markdown::Merge::SmartMerger do
   end
 
   describe "preference: :template", :markdown_backend do
-    it "uses template content for matching nodes" do
-      merger = described_class.new(template_content, dest_content, preference: :template)
-      result = merger.merge
+    # Preference determines which source to use when nodes MATCH.
+    # - preference: :destination (default) - use destination's version of matched nodes
+    # - preference: :template - use template's version of matched nodes
+    #
+    # For exact signature matches, content is identical so preference is moot.
+    # Preference becomes meaningful when:
+    # 1. A match_refiner allows fuzzy matching (e.g., TableMatchRefiner)
+    # 2. Source formatting differs but signatures match
 
-      expect(result).to include("template description")
+    context "with exact signature matches" do
+      it "preserves destination content by default" do
+        merger = described_class.new(template_content, dest_content, preference: :destination)
+        result = merger.merge
+
+        # Matched nodes use destination version, destination-only nodes preserved
+        expect(result).to include("my custom description")
+        expect(result).to include("Custom Section")
+      end
+
+      it "preserves matched heading structure with :template preference" do
+        merger = described_class.new(template_content, dest_content, preference: :template)
+        result = merger.merge
+
+        # Headings match exactly, so "## Description" appears in result
+        expect(result).to include("## Description")
+      end
+    end
+
+    context "with fuzzy table matching via match_refiner" do
+      let(:template_with_table) do
+        <<~MARKDOWN
+          # Data
+
+          | Name | Value |
+          |------|-------|
+          | foo  | 100   |
+          | bar  | 200   |
+        MARKDOWN
+      end
+
+      let(:dest_with_similar_table) do
+        <<~MARKDOWN
+          # Data
+
+          | Name | Value |
+          |------|-------|
+          | foo  | 150   |
+          | baz  | 300   |
+        MARKDOWN
+      end
+
+      it "uses destination table content with :destination preference" do
+        refiner = Markdown::Merge::TableMatchRefiner.new(threshold: 0.3)
+        merger = described_class.new(
+          template_with_table,
+          dest_with_similar_table,
+          preference: :destination,
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        # Tables fuzzy-match, preference: :destination uses destination's values
+        expect(result).to include("150")
+        expect(result).to include("baz")
+      end
+
+      it "uses template table content with :template preference" do
+        refiner = Markdown::Merge::TableMatchRefiner.new(threshold: 0.3)
+        merger = described_class.new(
+          template_with_table,
+          dest_with_similar_table,
+          preference: :template,
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        # Tables fuzzy-match, preference: :template uses template's values
+        expect(result).to include("100")
+        expect(result).to include("bar")
+      end
+    end
+
+    context "with Hash preference for per-node-type control" do
+      let(:template_with_mixed) do
+        <<~MARKDOWN
+          # Title
+
+          Template paragraph.
+
+          | Col1 | Col2 |
+          |------|------|
+          | T1   | T2   |
+        MARKDOWN
+      end
+
+      let(:dest_with_mixed) do
+        <<~MARKDOWN
+          # Title
+
+          Destination paragraph.
+
+          | Col1 | Col2 |
+          |------|------|
+          | D1   | D2   |
+        MARKDOWN
+      end
+
+      it "applies different preferences to different node types" do
+        refiner = Markdown::Merge::TableMatchRefiner.new(threshold: 0.3)
+        merger = described_class.new(
+          template_with_mixed,
+          dest_with_mixed,
+          preference: {default: :destination, table: :template},
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        # Headings use :destination (default), tables use :template
+        # Heading "# Title" matches exactly - either source gives same result
+        expect(result).to include("# Title")
+        # Table should use template values with :template preference for tables
+        expect(result).to include("T1")
+      end
+    end
+
+    context "with ContentMatchRefiner for fuzzy paragraph matching" do
+      let(:template_with_paragraph) do
+        <<~MARKDOWN
+          # Title
+
+          This is a paragraph about the project description.
+        MARKDOWN
+      end
+
+      let(:dest_with_similar_paragraph) do
+        <<~MARKDOWN
+          # Title
+
+          This is a paragraph about the project desciption.
+        MARKDOWN
+      end
+
+      it "matches paragraphs with minor differences using ContentMatchRefiner" do
+        # Note: "description" vs "desciption" (typo)
+        refiner = Ast::Merge::ContentMatchRefiner.new(
+          threshold: 0.8,
+          node_types: [:paragraph],
+        )
+        merger = described_class.new(
+          template_with_paragraph,
+          dest_with_similar_paragraph,
+          preference: :template,
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        # With :template preference, the template's correct spelling should be used
+        expect(result).to include("description")
+      end
+
+      it "uses destination content with :destination preference" do
+        refiner = Ast::Merge::ContentMatchRefiner.new(
+          threshold: 0.8,
+          node_types: [:paragraph],
+        )
+        merger = described_class.new(
+          template_with_paragraph,
+          dest_with_similar_paragraph,
+          preference: :destination,
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        # With :destination preference, the typo is preserved
+        expect(result).to include("desciption")
+      end
     end
   end
 
@@ -181,6 +352,62 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
       expect(result).to include("Do not modify this content")
       expect(result).not_to include("Modified template content")
+    end
+  end
+
+  describe "#create_file_analysis", :markdown_backend do
+    it "creates FileAnalysis instances" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.send(:create_file_analysis, template_content, freeze_token: "test-token")
+
+      expect(analysis).to be_a(Markdown::Merge::FileAnalysis)
+    end
+
+    it "passes backend option" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.send(:create_file_analysis, template_content,
+        backend: merger.backend,
+        freeze_token: "test-token")
+
+      expect(analysis.backend).to eq(merger.backend)
+    end
+  end
+
+  describe "#node_to_source", :markdown_backend do
+    it "extracts source text from nodes" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+      node = analysis.statements.first
+
+      source = merger.send(:node_to_source, node, analysis)
+      expect(source).to be_a(String)
+      expect(source).not_to be_empty
+    end
+
+    it "handles FreezeNode instances" do
+      merger = described_class.new(template_content, content_with_freeze)
+      analysis = merger.dest_analysis
+      freeze_node = analysis.freeze_blocks.first
+
+      if freeze_node
+        source = merger.send(:node_to_source, freeze_node, analysis)
+        expect(source).to be_a(String)
+        expect(source).to include("markdown-merge:freeze")
+      end
+    end
+  end
+
+  describe "#template_parse_error_class", :markdown_backend do
+    it "returns Markdown::Merge::TemplateParseError" do
+      merger = described_class.new(template_content, dest_content)
+      expect(merger.send(:template_parse_error_class)).to eq(Markdown::Merge::TemplateParseError)
+    end
+  end
+
+  describe "#destination_parse_error_class", :markdown_backend do
+    it "returns Markdown::Merge::DestinationParseError" do
+      merger = described_class.new(template_content, dest_content)
+      expect(merger.send(:destination_parse_error_class)).to eq(Markdown::Merge::DestinationParseError)
     end
   end
 

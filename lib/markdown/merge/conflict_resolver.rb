@@ -32,12 +32,14 @@ module Markdown
       # @param preference [Symbol] Which version to prefer (:destination or :template)
       # @param template_analysis [FileAnalysisBase] Analysis of the template file
       # @param dest_analysis [FileAnalysisBase] Analysis of the destination file
-      def initialize(preference:, template_analysis:, dest_analysis:)
+      # @param options [Hash] Additional options for forward compatibility
+      def initialize(preference:, template_analysis:, dest_analysis:, **options)
         super(
           strategy: :node,
           preference: preference,
           template_analysis: template_analysis,
-          dest_analysis: dest_analysis
+          dest_analysis: dest_analysis,
+          **options
         )
       end
 

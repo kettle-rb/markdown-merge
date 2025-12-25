@@ -22,6 +22,11 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Changed
 
+- **ConflictResolver**: Added `**options` for forward compatibility
+- **MergeResult**: Added `**options` for forward compatibility
+- **CodeBlockMerger specs**: Updated to use dependency tags (`:prism_merge`, `:psych_merge`, `:json_merge`)
+  instead of manual skip blocks, ensuring tests are properly skipped when backends aren't available
+
 ### Deprecated
 
 ### Removed
