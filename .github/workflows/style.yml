@@ -30,8 +30,6 @@ jobs:
     continue-on-error: ${{ matrix.experimental || endsWith(matrix.ruby, 'head') }}
     env: # $BUNDLE_GEMFILE must be set at job level, so it is set for all steps
       BUNDLE_GEMFILE: ${{ github.workspace }}/${{ matrix.gemfile }}.gemfile
-      # Prevent RuboCop from loading .rubocop.yml configs from vendored gems
-      RUBOCOP_OPTS: "--config .rubocop.yml"
     strategy:
       fail-fast: false
       matrix:
