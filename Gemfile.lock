@@ -1,127 +1,7 @@
 GIT
-  remote: https://github.com/pboling/yard-junk.git
-  revision: 54ccebabbfa9a9cd44d0b991687ebbfd22c32b55
-  branch: next
-  specs:
-    yard-junk (0.0.10)
-      backports (>= 3.18)
-      benchmark
-      ostruct
-      rainbow
-      yard
-
-PATH
-  remote: ../..
-  specs:
-    ast-merge (4.0.2)
-      tree_haver (~> 5.0, >= 5.0.1)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../bash-merge
-  specs:
-    bash-merge (2.0.3)
-      ast-merge (~> 4.0, >= 4.0.2)
-      tree_haver (~> 5.0, >= 5.0.1)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../commonmarker-merge
-  specs:
-    commonmarker-merge (1.0.0)
-      commonmarker (~> 2.0)
-      markdown-merge (~> 1.0)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../dotenv-merge
-  specs:
-    dotenv-merge (1.0.1)
-      ast-merge (~> 4.0, >= 4.0.2)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../json-merge
-  specs:
-    json-merge (1.1.0)
-      ast-merge (~> 4.0, >= 4.0.2)
-      tree_haver (~> 5.0, >= 5.0.1)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../jsonc-merge
-  specs:
-    jsonc-merge (1.0.0)
-      ast-merge (~> 4.0, >= 4.0.2)
-      tree_haver (~> 5.0, >= 5.0.1)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../kettle-dev
-  specs:
-    kettle-dev (1.2.5)
-
-PATH
-  remote: ../kettle-soup-cover
-  specs:
-    kettle-soup-cover (1.1.1)
-      simplecov (~> 0.22)
-      simplecov-cobertura (~> 3.0)
-      simplecov-console (~> 0.9, >= 0.9.3)
-      simplecov-html (~> 0.13, >= 0.13.1)
-      simplecov-lcov (~> 0.8)
-      simplecov-rcov (~> 0.3, >= 0.3.7)
-      simplecov_json_formatter (~> 0.1, >= 0.1.4)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../kettle-test
-  specs:
-    kettle-test (1.0.7)
-      appraisal2 (~> 3.0)
-      backports (~> 3.0)
-      rspec (~> 3.0)
-      rspec-block_is_expected (~> 1.0, >= 1.0.6)
-      rspec-pending_for (~> 0.1, >= 0.1.19)
-      rspec-stubbed_env (~> 1.0, >= 1.0.4)
-      rspec_junit_formatter (~> 0.6)
-      silent_stream (~> 1.0, >= 1.0.12)
-      timecop-rspec (~> 1.0, >= 1.0.3)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../markly-merge
-  specs:
-    markly-merge (1.0.0)
-      markdown-merge (~> 1.0)
-      markly (~> 0.15)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../prism-merge
-  specs:
-    prism-merge (2.0.0)
-      ast-merge (~> 4.0, >= 4.0.2)
-      prism (~> 1.6)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../psych-merge
-  specs:
-    psych-merge (1.0.0)
-      ast-merge (~> 4.0, >= 4.0.2)
-      psych (~> 5.0)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../rbs-merge
-  specs:
-    rbs-merge (1.0.0)
-      ast-merge (~> 4.0, >= 4.0.2)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../ruby-tree-sitter
+  remote: https://github.com/pboling/ruby-tree-sitter.git
+  revision: c36cff9cbf55ca1512cc49d8739e4efc2ff0a962
+  branch: tree_haver
   specs:
     ruby_tree_sitter (2.0.0)
       oppen (~> 1.0)
@@ -164,24 +44,24 @@ PATH
       sorbet-runtime
       zeitwerk
 
-PATH
-  remote: ../toml-merge
-  specs:
-    toml-merge (2.0.0)
-      ast-merge (~> 4.0, >= 4.0.2)
-      tree_haver (~> 5.0, >= 5.0.1)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../tree_haver
-  specs:
-    tree_haver (5.0.2)
-      version_gem (~> 1.1, >= 1.1.9)
-
-PATH
-  remote: ../tree_stump
+GIT
+  remote: https://github.com/pboling/tree_stump.git
+  revision: 117b262335214bbfb3ec8210dc0efe336db03538
+  branch: tree_haver
   specs:
     tree_stump (0.1.0)
+
+GIT
+  remote: https://github.com/pboling/yard-junk.git
+  revision: 54ccebabbfa9a9cd44d0b991687ebbfd22c32b55
+  branch: next
+  specs:
+    yard-junk (0.0.10)
+      backports (>= 3.18)
+      benchmark
+      ostruct
+      rainbow
+      yard
 
 PATH
   remote: .
@@ -203,6 +83,9 @@ GEM
       rake (>= 10)
       thor (>= 0.14)
     ast (2.4.3)
+    ast-merge (4.0.2)
+      tree_haver (~> 5.0, >= 5.0.1)
+      version_gem (~> 1.1, >= 1.1.9)
     backports (3.25.3)
     benchmark (0.5.0)
     bigdecimal (3.3.1)
@@ -237,7 +120,7 @@ GEM
       concurrent-ruby (~> 1.0)
       logger
       zeitwerk (~> 2.6)
-    dry-inflector (1.3.0)
+    dry-inflector (1.3.1)
     dry-initializer (3.2.0)
     dry-logic (1.6.0)
       bigdecimal
@@ -283,8 +166,30 @@ GEM
       pp (>= 0.6.0)
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
+    jar-dependencies (0.5.5)
     json (2.18.0)
     json (2.18.0-java)
+    kettle-dev (1.2.4)
+    kettle-soup-cover (1.1.1)
+      simplecov (~> 0.22)
+      simplecov-cobertura (~> 3.0)
+      simplecov-console (~> 0.9, >= 0.9.3)
+      simplecov-html (~> 0.13, >= 0.13.1)
+      simplecov-lcov (~> 0.8)
+      simplecov-rcov (~> 0.3, >= 0.3.7)
+      simplecov_json_formatter (~> 0.1, >= 0.1.4)
+      version_gem (~> 1.1, >= 1.1.9)
+    kettle-test (1.0.7)
+      appraisal2 (~> 3.0)
+      backports (~> 3.0)
+      rspec (~> 3.0)
+      rspec-block_is_expected (~> 1.0, >= 1.0.6)
+      rspec-pending_for (~> 0.1, >= 0.1.19)
+      rspec-stubbed_env (~> 1.0, >= 1.0.4)
+      rspec_junit_formatter (~> 0.6)
+      silent_stream (~> 1.0, >= 1.0.12)
+      timecop-rspec (~> 1.0, >= 1.0.3)
+      version_gem (~> 1.1, >= 1.1.9)
     kramdown (2.5.1)
       rexml (>= 3.3.9)
     kramdown-parser-gfm (1.1.0)
@@ -320,7 +225,7 @@ GEM
     oppen (1.0.0)
     ostruct (0.6.3)
     parallel (1.27.0)
-    parser (3.3.10.0)
+    parser (3.3.10.1)
       ast (~> 2.4.1)
       racc
     parslet (2.0.0)
@@ -332,10 +237,13 @@ GEM
       pdf-core (~> 0.10.0)
       ttfunk (~> 1.8)
     prettyprint (0.2.0)
-    prism (1.7.0)
+    prism (1.8.0)
     psych (5.3.1)
       date
       stringio
+    psych (5.3.1-java)
+      date
+      jar-dependencies (>= 0.1.7)
     public_suffix (7.0.2)
     racc (1.8.1)
     racc (1.8.1-java)
@@ -384,7 +292,7 @@ GEM
     rspec-support (3.13.6)
     rspec_junit_formatter (0.6.0)
       rspec-core (>= 2, < 4, != 2.12.0)
-    rubocop (1.81.7)
+    rubocop (1.82.1)
       json (~> 2.3)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.1.0)
@@ -392,7 +300,7 @@ GEM
       parser (>= 3.3.0.2)
       rainbow (>= 2.2.2, < 4.0)
       regexp_parser (>= 2.9.3, < 3.0)
-      rubocop-ast (>= 1.47.1, < 2.0)
+      rubocop-ast (>= 1.48.0, < 2.0)
       ruby-progressbar (~> 1.7)
       unicode-display_width (>= 2.4.0, < 4.0)
     rubocop-ast (1.49.0)
@@ -410,7 +318,7 @@ GEM
       version_gem (>= 1.1.2, < 3)
     rubocop-md (1.2.4)
       rubocop (>= 1.45)
-    rubocop-on-rbs (1.8.0)
+    rubocop-on-rbs (1.9.0)
       lint_roller (~> 1.1)
       rbs (~> 3.5)
       rubocop (>= 1.72.1, < 2.0)
@@ -464,11 +372,11 @@ GEM
     simplecov-rcov (0.3.7)
       simplecov (>= 0.4.1)
     simplecov_json_formatter (0.1.4)
-    sorbet-runtime (0.6.12883)
-    standard (1.52.0)
+    sorbet-runtime (0.6.12894)
+    standard (1.53.0)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.0)
-      rubocop (~> 1.81.7)
+      rubocop (~> 1.82.0)
       standard-custom (~> 1.0.0)
       standard-performance (~> 1.8)
     standard-custom (1.0.2)
@@ -500,6 +408,8 @@ GEM
     toml-rb (4.1.0)
       citrus (~> 3.0, > 3.0)
       racc (~> 1.7)
+    tree_haver (5.0.2)
+      version_gem (~> 1.1, >= 1.1.9)
     tsort (0.2.0)
     ttfunk (1.8.0)
       bigdecimal (~> 3.1)
@@ -540,36 +450,26 @@ PLATFORMS
 DEPENDENCIES
   addressable (>= 2.8, < 3)
   appraisal2 (~> 3.0)
-  ast-merge!
-  bash-merge!
   benchmark (~> 0.5, >= 0.5.0)
   bundler-audit (~> 0.9.2)
   citrus
   commonmarker
-  commonmarker-merge!
   debug (>= 1.1)
-  dotenv-merge!
   erb (~> 5.0)
   ffi
   gem_bench (~> 2.0, >= 2.0.5)
   gitmoji-regex (~> 1.0, >= 1.0.3)
   irb (~> 1.15, >= 1.15.2)
-  json-merge!
-  jsonc-merge!
-  kettle-dev (~> 1.1, >= 0)!
-  kettle-soup-cover!
-  kettle-test (~> 1.0, >= 1.0.6, >= 0)!
+  kettle-dev (~> 1.1)
+  kettle-soup-cover (~> 1.0, >= 1.0.10)
+  kettle-test (~> 1.0, >= 1.0.6)
   kramdown (~> 2.5, >= 2.5.1)
   kramdown-parser-gfm (~> 1.1)
   markdown-merge!
   markly (~> 0.15, >= 0.15.2)
-  markly-merge!
   mutex_m (~> 0.2)
-  prism-merge!
-  psych-merge!
   rake (~> 13.0)
   rbs (>= 3.10)
-  rbs-merge!
   rdoc (~> 6.11)
   reek (~> 6.5)
   require_bench (~> 1.0, >= 1.0.4)
@@ -584,9 +484,7 @@ DEPENDENCIES
   stone_checksums (~> 1.0, >= 1.0.2)
   stringio (>= 3.0)
   toml
-  toml-merge!
   toml-rb
-  tree_haver!
   tree_stump!
   yaml-converter (~> 0.1)
   yard (~> 0.9, >= 0.9.37)
