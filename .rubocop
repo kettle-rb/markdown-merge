@@ -1,0 +1,2 @@
+--config .rubocop.yml
+--debug
