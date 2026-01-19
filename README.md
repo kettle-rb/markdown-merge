@@ -304,16 +304,11 @@ The maintainers of this and thousands of other packages are working with Tidelif
 [![Get help from me on Tidelift][🏙️entsup-tidelift-img]][🏙️entsup-tidelift]
 
 - 💡Subscribe for support guarantees covering *all* your FLOSS dependencies
-
 - 💡Tidelift is part of [Sonar][🏙️entsup-tidelift-sonar]
-
 - 💡Tidelift pays maintainers to maintain the software you depend on\!<br/>📊`@`Pointy Haired Boss: An [enterprise support][🏙️entsup-tidelift] subscription is "[never gonna let you down][🧮kloc]", and *supports* open source maintainers
   Alternatively:
-
 - [![Live Chat on Discord][✉️discord-invite-img-ftb]][🖼️galtzo-discord]
-
 - [![Get help from me on Upwork][👨🏼‍🏫expsup-upwork-img]][👨🏼‍🏫expsup-upwork]
-
 - [![Get help from me on Codementor][👨🏼‍🏫expsup-codementor-img]][👨🏼‍🏫expsup-codementor]
 
 </details>
@@ -499,7 +494,6 @@ merger = Markly::Merge::SmartMerger.new(template, dest, flags: Markly::DEFAULT, 
 ```
 
 ```` 
-
 ### Freeze Blocks
 
 Freeze blocks protect sections from being modified during merges. They are marked
@@ -515,7 +509,7 @@ The merge tool will not modify, replace, or remove this content.
 <!-- markdown-merge:unfreeze -->
 ````
 
-You can(add(an(optional(reason(to(document(why(a(section(is(frozen:
+Add an optional frozen reason to document why:
 
 ```markdown
 <!-- markdown-merge:freeze Custom table - manually maintained -->
@@ -890,7 +884,6 @@ See [LICENSE.txt][📄license] for the official [Copyright Notice][📄copyright
             </picture>
         </a>, and markdown-merge contributors.
     </li>
-
 </ul>
 
 ## 🤑 A request for help
@@ -1072,7 +1065,7 @@ Thanks for RTFM. ☺️
 [📌gitmoji]: https://gitmoji.dev
 [📌gitmoji-img]: https://img.shields.io/badge/gitmoji_commits-%20%F0%9F%98%9C%20%F0%9F%98%8D-34495e.svg?style=flat-square
 [🧮kloc]: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-[🧮kloc-img]: https://img.shields.io/badge/KLOC-4.308-FFDD67.svg?style=for-the-badge&logo=YouTube&logoColor=blue
+[🧮kloc-img]: https://img.shields.io/badge/KLOC-1.972-FFDD67.svg?style=for-the-badge&logo=YouTube&logoColor=blue
 [🔐security]: SECURITY.md
 [🔐security-img]: https://img.shields.io/badge/security-policy-259D6C.svg?style=flat
 [📄copyright-notice-explainer]: https://opensource.stackexchange.com/questions/5778/why-do-licenses-such-as-the-mit-license-specify-a-single-year

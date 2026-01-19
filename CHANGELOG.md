@@ -20,6 +20,25 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [1.0.0] - 2026-01-19
+
+- TAG: [v1.0.0][1.0.0t]
+- COVERAGE: 91.43% -- 1803/1972 lines in 29 files
+- BRANCH COVERAGE: 79.10% -- 579/732 branches in 29 files
+- 96.92% documented
+
+### Added
+
 - **Cleanse Module**: New namespace for document cleansing/repair utilities
   - `Cleanse::CondensedLinkRefs` - Fixes condensed link reference definitions caused by previous merge bugs
     - Parslet-based PEG parser (linear-time, ReDoS-safe) for detecting and expanding `[label]: url[label2]: url2` → separate lines
@@ -176,10 +195,6 @@ Please file a bug if you notice a violation of semantic versioning.
   - Error handling is now consolidated in `merge_code_blocks` instance method
   - Class methods now raise exceptions which are caught by `merge_code_blocks`
   - Updated specs to test through `merge_code_blocks` (the intended API) instead of class methods directly
-
-### Deprecated
-
-### Removed
 
 ### Fixed
 
