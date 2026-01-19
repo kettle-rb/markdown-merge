@@ -22,11 +22,13 @@ Please file a bug if you notice a violation of semantic versioning.
 
 - **Cleanse Module**: New namespace for document cleansing/repair utilities
   - `Cleanse::CondensedLinkRefs` - Fixes condensed link reference definitions caused by previous merge bugs
-    - Parslet-based PEG parser for detecting and expanding `[label]: url[label2]: url2` → separate lines
+    - Parslet-based PEG parser (linear-time, ReDoS-safe) for detecting and expanding `[label]: url[label2]: url2` → separate lines
+    - Detects two corruption patterns: (1) multiple definitions on same line, (2) content before definition without newline
     - Methods: `#condensed?`, `#expand`, `#definitions`, `#count`
   - `Cleanse::CodeFenceSpacing` - Fixes malformed code fence language tags
     - Fixes ` ``` console` → ` ```console` (removes space between backticks and language)
-    - Parslet-based parser for detecting code blocks and their info strings
+    - Parslet-based PEG parser (linear-time, ReDoS-safe) for detecting code blocks and their info strings
+    - Supports any indentation level (handles code blocks nested in lists)
     - Methods: `#malformed?`, `#malformed_count`, `#code_blocks`, `#fix`
   - `Cleanse::BlockSpacing` - Fixes missing blank lines between block elements
     - Detects and fixes missing blank lines after thematic breaks (`---`)
@@ -35,6 +37,7 @@ Please file a bug if you notice a violation of semantic versioning.
     - Detects and fixes missing blank lines before HTML when preceded by markdown
     - Special handling for markdown container closing tags (e.g., `</details>`) - adds blank lines before them even when inside HTML blocks, since their content may be markdown
     - Methods: `#malformed?`, `#issue_count`, `#issues`, `#fix`
+  - **Security Note**: `CondensedLinkRefs` and `CodeFenceSpacing` use PEG parsers instead of regex to eliminate ReDoS vulnerabilities. Both process untrusted Markdown input safely in O(n) time.
 - **LinkParser tree-based nesting detection**:
   - `#find_all_link_constructs(content)` - Returns tree structure with `:children` for nested items
   - `#build_link_tree(links, images)` - Detects containment and builds parent-child relationships
@@ -227,8 +230,6 @@ Please file a bug if you notice a violation of semantic versioning.
   3. `inner_node.to_commonmark` (TreeHaver Commonmarker wrapper)
   This fixes freeze block detection for Commonmarker where the TreeHaver wrapper's
   content methods return empty but the inner node has the actual content.
-
-### Security
 
 [Unreleased]: https://github.com/kettle-rb/markdown-merge/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/kettle-rb/markdown-merge/compare/76f2230840b236dd10fdd7baf322c082762dddb0...v1.0.0
