@@ -273,6 +273,32 @@ module Markdown
       def not_merged: (String reason) -> Hash[Symbol, untyped]
     end
 
+    # Builds markdown output from merge operations
+    class OutputBuilder
+      @parts: Array[String]
+      @preserve_formatting: bool
+
+      def initialize: (?preserve_formatting: bool) -> void
+      def add_node_source: (untyped node, FileAnalysisBase analysis) -> void
+      def add_link_definition: (LinkDefinitionNode node) -> void
+      def add_gap_line: (?count: Integer) -> void
+      def add_raw: (String text) -> void
+      def to_s: () -> String
+      def empty?: () -> bool
+      def clear: () -> void
+
+      private
+
+      def extract_source: (untyped node, FileAnalysisBase analysis) -> String?
+      def extract_parser_node_source: (untyped node, FileAnalysisBase analysis) -> String?
+    end
+
+    # Formats link reference definitions for output
+    module LinkDefinitionFormatter
+      def self.format: (LinkDefinitionNode node) -> String
+      def self.format_all: (Array[LinkDefinitionNode] nodes, ?separator: String) -> String
+    end
+
     # Base class for smart Markdown file merging
     class SmartMergerBase
       attr_reader template_analysis: FileAnalysisBase

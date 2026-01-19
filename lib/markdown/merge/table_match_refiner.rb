@@ -33,13 +33,18 @@ module Markdown
       # @return [Hash] Options passed to TableMatchAlgorithm
       attr_reader :algorithm_options
 
+      # @return [Symbol] The markdown backend being used
+      attr_reader :backend
+
       # Initialize a table match refiner.
       #
       # @param threshold [Float] Minimum score to accept a match (default: 0.5)
       # @param algorithm_options [Hash] Options for TableMatchAlgorithm
-      def initialize(threshold: DEFAULT_THRESHOLD, algorithm_options: {}, **options)
+      # @param backend [Symbol] Markdown backend for type normalization (default: :commonmarker)
+      def initialize(threshold: DEFAULT_THRESHOLD, algorithm_options: {}, backend: :commonmarker, **options)
         super(threshold: threshold, node_types: [:table], **options)
         @algorithm_options = algorithm_options
+        @backend = backend
       end
 
       # Find matches between unmatched table nodes.
@@ -78,10 +83,28 @@ module Markdown
 
       # Check if a node is a table.
       #
+      # Handles wrapped nodes (merge_type is symbol) and raw nodes (type is string).
+      #
       # @param node [Object] Node to check
       # @return [Boolean]
       def table_node?(node)
-        return true if node.respond_to?(:type) && node.type == :table
+        # Check if it's a typed wrapper node first
+        if Ast::Merge::NodeTyping.typed_node?(node)
+          return Ast::Merge::NodeTyping.merge_type_for(node) == :table
+        end
+
+        # Check merge_type directly (wrapped nodes from NodeTypeNormalizer)
+        if node.respond_to?(:merge_type) && node.merge_type
+          return node.merge_type == :table
+        end
+
+        # Check raw type (string comparison for tree_haver nodes)
+        if node.respond_to?(:type)
+          node_type = node.type
+          return node_type == :table || node_type == "table" || node_type.to_s == "table"
+        end
+
+        # Fallback: class name check
         return true if node.class.name.to_s.include?("Table")
 
         false
@@ -102,6 +125,7 @@ module Markdown
           position_b: d_idx,
           total_tables_a: total_t,
           total_tables_b: total_d,
+          backend: @backend,
           **algorithm_options,
         )
 

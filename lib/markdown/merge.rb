@@ -7,28 +7,50 @@ require "set"
 # Shared merge infrastructure
 require "ast/merge"
 
+# tree_haver provides unified markdown parsing via multiple backends
+require "tree_haver"
+
 # This gem - only require version
 require_relative "merge/version"
 
 module Markdown
-  # Smart merging for Markdown files using AST-based parsers.
+  # Smart merging for Markdown files using AST-based parsers via tree_haver.
   #
-  # Markdown::Merge provides a shared foundation for intelligent Markdown merging:
-  # - Base classes for parser-specific implementations
+  # Markdown::Merge provides intelligent Markdown merging with support for
+  # multiple parsing backends (Commonmarker, Markly) through tree_haver:
+  # - Standalone SmartMerger that works with any available backend
   # - Matching structural elements (headings, paragraphs, lists, etc.) between files
   # - Preserving frozen sections marked with HTML comments
   # - Resolving conflicts based on configurable preferences
+  # - Node type normalization for portable merge rules across backends
   #
-  # This gem is typically not used directly. Instead, use a parser-specific
-  # implementation like commonmarker-merge or markly-merge.
+  # Can be used directly or through parser-specific wrappers
+  # (commonmarker-merge, markly-merge) that provide hard dependencies
+  # and backend-specific defaults.
   #
-  # @example Using with commonmarker-merge
+  # @example Direct usage with auto backend detection
+  #   require "markdown/merge"
+  #   merger = Markdown::Merge::SmartMerger.new(template, destination)
+  #   result = merger.merge
+  #
+  # @example With specific backend
+  #   merger = Markdown::Merge::SmartMerger.new(
+  #     template,
+  #     destination,
+  #     backend: :markly,
+  #     flags: Markly::DEFAULT,
+  #     extensions: [:table, :strikethrough]
+  #   )
+  #   result = merger.merge
+  #
+  # @example Using via commonmarker-merge
   #   require "commonmarker/merge"
   #   merger = Commonmarker::Merge::SmartMerger.new(template, destination)
   #   result = merger.merge
   #
-  # @see FileAnalysisBase Base class for file analysis
-  # @see SmartMergerBase Base class for merge operations
+  # @see SmartMerger Main entry point for merging
+  # @see FileAnalysis For parsing and analyzing Markdown files
+  # @see NodeTypeNormalizer For type normalization across backends
   module Merge
     # Base error class for Markdown::Merge
     # Inherits from Ast::Merge::Error for consistency across merge gems.
@@ -77,7 +99,8 @@ module Markdown
     #   end
     class DestinationParseError < ParseError; end
 
-    # Autoload all components
+    # Autoload all components - base classes
+    autoload :Cleanse, "markdown/merge/cleanse"
     autoload :DebugLogger, "markdown/merge/debug_logger"
     autoload :FreezeNode, "markdown/merge/freeze_node"
     autoload :FileAnalysisBase, "markdown/merge/file_analysis_base"
@@ -88,7 +111,37 @@ module Markdown
     autoload :TableMatchRefiner, "markdown/merge/table_match_refiner"
     autoload :CodeBlockMerger, "markdown/merge/code_block_merger"
     autoload :SmartMergerBase, "markdown/merge/smart_merger_base"
+    autoload :LinkDefinitionNode, "markdown/merge/link_definition_node"
+    autoload :GapLineNode, "markdown/merge/gap_line_node"
+    autoload :OutputBuilder, "markdown/merge/output_builder"
+    autoload :LinkDefinitionFormatter, "markdown/merge/link_definition_formatter"
+    autoload :MarkdownStructure, "markdown/merge/markdown_structure"
+    autoload :DocumentProblems, "markdown/merge/document_problems"
+    autoload :WhitespaceNormalizer, "markdown/merge/whitespace_normalizer"
+    autoload :LinkParser, "markdown/merge/link_parser"
+    autoload :LinkReferenceRehydrator, "markdown/merge/link_reference_rehydrator"
+
+    # Autoload concrete implementations (tree_haver-based)
+    autoload :NodeTypeNormalizer, "markdown/merge/node_type_normalizer"
+    autoload :FileAnalysis, "markdown/merge/file_analysis"
+    autoload :SmartMerger, "markdown/merge/smart_merger"
+    autoload :PartialTemplateMerger, "markdown/merge/partial_template_merger"
   end
+end
+
+# Register with ast-merge's MergeGemRegistry for RSpec dependency tags
+# Note: markdown-merge requires a backend (markly or commonmarker) to instantiate,
+# so we use skip_instantiation: true
+# Only register if MergeGemRegistry is loaded (i.e., in test environment)
+if defined?(Ast::Merge::RSpec::MergeGemRegistry)
+  Ast::Merge::RSpec::MergeGemRegistry.register(
+    :markdown_merge,
+    require_path: "markdown/merge",
+    merger_class: "Markdown::Merge::SmartMerger",
+    test_source: "# Test\n\nParagraph",
+    category: :markdown,
+    skip_instantiation: true,
+  )
 end
 
 Markdown::Merge::Version.class_eval do

@@ -99,5 +99,18 @@ RSpec.describe Markdown::Merge do
     it "autoloads SmartMergerBase" do
       expect(described_class::SmartMergerBase).to be_a(Class)
     end
+
+    # Concrete implementations (tree_haver-based)
+    it "autoloads NodeTypeNormalizer" do
+      expect(described_class::NodeTypeNormalizer).to be_a(Module)
+    end
+
+    it "autoloads FileAnalysis" do
+      expect(described_class::FileAnalysis).to be_a(Class)
+    end
+
+    it "autoloads SmartMerger" do
+      expect(described_class::SmartMerger).to be_a(Class)
+    end
   end
 end

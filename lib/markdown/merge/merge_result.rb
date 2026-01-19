@@ -22,21 +22,35 @@ module Markdown
     #     end
     #   end
     #
+    # @example Checking for document problems
+    #   result = SmartMerger.merge(source_a, source_b, normalize_whitespace: true)
+    #   result.problems.by_category(:excessive_whitespace).each do |problem|
+    #     puts "Whitespace issue at line #{problem.details[:line]}"
+    #   end
+    #
     # @see Ast::Merge::MergeResultBase Base class
+    # @see DocumentProblems For problem tracking
     class MergeResult < Ast::Merge::MergeResultBase
+      # @return [DocumentProblems] Problems found during merge
+      attr_reader :problems
+
       # Initialize a new MergeResult
       #
       # @param content [String, nil] Merged content (nil if merge failed)
       # @param conflicts [Array<Hash>] Conflict descriptions
       # @param frozen_blocks [Array<Hash>] Preserved frozen block info
       # @param stats [Hash] Merge statistics
-      def initialize(content:, conflicts: [], frozen_blocks: [], stats: {})
+      # @param problems [DocumentProblems, nil] Document problems found
+      # @param options [Hash] Additional options for forward compatibility
+      def initialize(content:, conflicts: [], frozen_blocks: [], stats: {}, problems: nil, **options)
         super(
           conflicts: conflicts,
           frozen_blocks: frozen_blocks,
-          stats: default_stats.merge(stats)
+          stats: default_stats.merge(stats),
+          **options
         )
         @content_raw = content
+        @problems = problems || DocumentProblems.new
       end
 
       # Get the merged content as a string.
