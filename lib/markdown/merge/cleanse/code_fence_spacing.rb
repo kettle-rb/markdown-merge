@@ -5,10 +5,27 @@ require "parslet"
 module Markdown
   module Merge
     module Cleanse
-      # Parslet-based parser for fixing malformed fenced code blocks.
+      # Parslet-based parser for fixing malformed fenced code blocks in Markdown.
+      #
+      # == The Problem
+      #
+      # This class fixes **improperly formatted fenced code blocks** where there is
+      # unwanted whitespace between the fence markers (``` or ~~~) and the language
+      # identifier.
       #
       # A bug in ast-merge (or its dependencies) caused fenced code blocks to be
-      # rendered with a space between the fence markers and the language identifier:
+      # rendered with a space between the fence markers and the language identifier.
+      #
+      # == Bug Pattern
+      #
+      # CommonMark and most Markdown parsers expect NO space between fence and language:
+      # - **Correct:** ` ```ruby` or ` ~~~python`
+      # - **Incorrect:** ` ``` ruby` or ` ~~~ python` (extra space)
+      #
+      # The extra space can cause:
+      # - Syntax highlighting to fail
+      # - The language identifier to be ignored
+      # - Rendering issues in various Markdown processors
       #
       # @example Malformed (buggy) input
       #   "``` console\nsome code\n```"
@@ -16,11 +33,27 @@ module Markdown
       # @example Fixed output
       #   "```console\nsome code\n```"
       #
+      # == Scope
+      #
+      # This fixer handles:
+      # - **Any indentation level** (0+ spaces before fence)
+      #   - Top-level: ` ```ruby`
+      #   - In lists: `    ```python` (4 spaces)
+      # - **Both fence types:** backticks (```) and tildes (~~~)
+      # - **Any fence length:** 3+ markers (````, ~~~~~, etc.)
+      #
       # == How It Works
       #
-      # The parser uses a PEG grammar (via Parslet) to recognize fenced code blocks
-      # and detect those with improper spacing. It then reconstructs them with
-      # proper formatting (no space between fence and language).
+      # The parser uses a **PEG grammar** (via Parslet) to:
+      # - Detect fence opening lines with optional indentation
+      # - Identify spacing between fence and language identifier
+      # - Track opening/closing fence pairs to avoid false positives
+      # - Reconstruct fences with proper formatting (no space)
+      #
+      # **Why PEG?** The previous regex-based implementation used patterns like
+      # `([ \t]*)` which can cause polynomial backtracking (ReDoS vulnerability)
+      # when processing malicious input with many tabs/spaces. PEG parsers are
+      # linear-time and immune to ReDoS attacks.
       #
       # @example Basic usage
       #   parser = Markdown::Merge::Cleanse::CodeFenceSpacing.new(content)
@@ -45,49 +78,51 @@ module Markdown
       #
       # @api public
       class CodeFenceSpacing
-        # Grammar for parsing fenced code blocks.
+        # Grammar for parsing fenced code blocks with PEG parser.
         #
         # Recognizes:
+        # - Any amount of indentation (handles nested lists)
         # - Backtick fences (```) and tilde fences (~~~)
         # - Optional info string (language identifier)
         # - Properly handles spacing issues
         #
+        # This PEG grammar is linear-time and cannot have polynomial backtracking,
+        # eliminating ReDoS vulnerabilities.
+        #
         # @api private
         class CodeFenceGrammar < Parslet::Parser
+          # Any amount of indentation (handles code blocks in lists)
+          # Captured as string, not array
+          rule(:indent) { match("[ ]").repeat }
+
           # Fence markers - 3+ backticks or tildes
-          rule(:backtick_fence) { str("`").repeat(3).as(:fence) }
-          rule(:tilde_fence) { str("~").repeat(3).as(:fence) }
+          rule(:backtick) { str("`") }
+          rule(:tilde) { str("~") }
+          rule(:backtick_fence) { backtick.repeat(3, nil) }
+          rule(:tilde_fence) { tilde.repeat(3, nil) }
           rule(:fence) { backtick_fence | tilde_fence }
 
-          # Space between fence and info string (the bug we're fixing)
+          # Whitespace after fence (the bug we're fixing)
           rule(:space) { match('[ \t]') }
           rule(:spaces) { space.repeat(1) }
           rule(:spaces?) { space.repeat }
 
           # Info string (language identifier + optional attributes)
-          # Ends at newline, doesn't include the fence chars in the content
-          rule(:info_char) { match('[^\r\n`]') }  # Backticks not allowed in info string per CommonMark
-          rule(:info_string) { info_char.repeat(1).as(:info) }
-          rule(:info_string?) { info_string.maybe }
+          # Cannot contain backticks or tildes per CommonMark
+          rule(:info_char) { match('[^\r\n`~]') }
+          rule(:info_string) { info_char.repeat(1) }
 
-          # The opening fence line: ```language or ``` language (with space = bug)
-          rule(:opening_fence) {
-            fence >> spaces?.as(:spacing) >> info_string? >> match('[\r\n]')
+          # Line ending
+          rule(:line_end) { str("\r").maybe >> str("\n").maybe >> any.absent? }
+
+          # Fence line with optional indentation, optional spacing, optional info
+          # Capture: indent (raw), fence (as :fence), spacing (as :spacing), info (as :info)
+          rule(:fence_line) {
+            indent.as(:indent) >> fence.as(:fence) >> spaces?.as(:spacing) >> info_string.maybe.as(:info) >> line_end
           }
 
-          root(:opening_fence)
+          root(:fence_line)
         end
-
-        # Pattern to find opening code fences in content
-        # Matches: ``` or ~~~ at start of line, followed by optional info string
-        # Note: Closing fences (just ```) without info string match but have empty info
-        # We distinguish opening fences by checking if there's an info string or if
-        # this is the first fence we've seen
-        FENCE_PATTERN = /^(```+|~~~+)([ \t]*)([^\r\n`]*)\r?$/
-
-        # Pattern specifically for malformed fences (space between fence and language)
-        # Language must start with a letter (not just any chars)
-        MALFORMED_PATTERN = /^(```+|~~~+)[ \t]+([a-zA-Z][^\r\n`]*)\r?$/
 
         # @return [String] the input text to parse
         attr_reader :source
@@ -108,7 +143,7 @@ module Markdown
         #
         # @return [Boolean] true if malformed fences are detected
         def malformed?
-          source.match?(MALFORMED_PATTERN)
+          code_blocks.any? { |block| block[:malformed] }
         end
 
         # Parse and return information about all fenced code blocks.
@@ -116,6 +151,7 @@ module Markdown
         # Only returns opening fences (not closing fences).
         #
         # @return [Array<Hash>] Array of code block info
+        #   - :indent [String] The indentation before the fence
         #   - :fence [String] The fence markers (e.g., "```" or "~~~")
         #   - :language [String, nil] The language identifier
         #   - :spacing [String] Any spacing between fence and language
@@ -128,40 +164,43 @@ module Markdown
           @code_blocks = []
           line_number = 0
           in_code_block = false
-          current_fence = nil
+          current_fence_char = nil
 
           source.each_line do |line|
             line_number += 1
-            match = line.match(FENCE_PATTERN)
-            next unless match
 
-            fence = match[1]
-            spacing = match[2] || ""
-            info = match[3] || ""
+            # Try to parse as fence line using PEG grammar
+            parsed = parse_fence_line(line)
+            next unless parsed
 
-            # Determine if this is opening or closing fence
-            # Closing fence: same fence type, no info string, and we're in a block
-            if in_code_block && fence.start_with?(current_fence[0]) && info.strip.empty?
-              # This is a closing fence - skip it
+            fence = parsed[:fence]
+            fence_char = fence[0]
+            spacing = parsed[:spacing] || ""
+            info = parsed[:info] || ""
+            indent = parsed[:indent] || ""
+
+            # Closing fence: matches current fence type and has no info
+            if in_code_block && fence_char == current_fence_char && info.empty?
               in_code_block = false
-              current_fence = nil
+              current_fence_char = nil
               next
             end
 
-            # This is an opening fence
+            # Opening fence
             in_code_block = true
-            current_fence = fence
+            current_fence_char = fence_char
 
             # Extract just the language (first word of info string)
             language = info.strip.split(/\s+/).first
             language = nil if language&.empty?
 
             @code_blocks << {
+              indent: indent,
               fence: fence,
               language: language,
               info_string: info.strip,
               spacing: spacing,
-              malformed: !spacing.empty? && !language.nil? && !language.empty?,
+              malformed: !spacing.empty? && !language.nil?,
               line_number: line_number,
               original: line.chomp,
             }
@@ -203,20 +242,51 @@ module Markdown
 
         private
 
+        # Parse a single line as a fence using PEG grammar.
+        #
+        # @param line [String] the line to parse
+        # @return [Hash, nil] parsed fence data or nil if not a fence
+        def parse_fence_line(line)
+          tree = @grammar.parse(line)
+
+          # Convert Parslet tree to simple hash
+          # Note: Parslet returns [] for empty repeats, we convert to empty string
+          indent_val = tree[:indent]
+          indent_str = indent_val.is_a?(Array) ? indent_val.join : indent_val.to_s
+
+          spacing_val = tree[:spacing]
+          spacing_str = spacing_val.is_a?(Array) ? spacing_val.join : spacing_val.to_s
+
+          info_val = tree[:info]
+          info_str = if info_val.is_a?(Array)
+            info_val.join
+          else
+            (info_val ? info_val.to_s : "")
+          end
+
+          {
+            indent: indent_str,
+            fence: tree[:fence].to_s,
+            spacing: spacing_str,
+            info: info_str,
+          }
+        rescue Parslet::ParseFailed
+          nil
+        end
+
         # Fix a single line if it's a malformed fence.
         #
         # @param line [String] the line to potentially fix
         # @return [String] the fixed line (or original if not malformed)
         def fix_fence_line(line)
-          match = line.match(MALFORMED_PATTERN)
-          return line unless match
+          parsed = parse_fence_line(line)
+          return line unless parsed
 
-          fence = match[1]
-          info = match[2]
+          # Only fix if there's spacing AND info string
+          return line if parsed[:spacing].empty? || parsed[:info].empty?
 
-          # Reconstruct without the space
-          # Preserve any trailing content after language (attributes, etc.)
-          "#{fence}#{info}\n"
+          # Reconstruct: indent + fence + info (no spacing)
+          "#{parsed[:indent]}#{parsed[:fence]}#{parsed[:info]}\n"
         end
       end
     end
