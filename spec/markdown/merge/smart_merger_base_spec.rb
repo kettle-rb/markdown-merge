@@ -50,6 +50,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         # Create a mock document
         @document = Object.new.tap do |doc|
           nodes = parse_simple(content)
+          # rubocop:disable ThreadSafety/ClassInstanceVariable -- Test double needs instance state
           def doc.first_child
             @first_child
           end
@@ -57,6 +58,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
           def doc.first_child=(node)
             @first_child = node
           end
+          # rubocop:enable ThreadSafety/ClassInstanceVariable
           doc.first_child = nodes.first
         end
 
@@ -365,10 +367,23 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       let(:node_typing) { {paragraph: ->(n) { n }} }
       let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
 
+      before do
+        stub_const("TestNode", Class.new {
+          class << self
+            def name
+              "TestNode"
+            end
+          end
+        })
+      end
+
       it "falls back to standard NodeTyping.process" do
         node = double("Node")
         # Must handle all respond_to? calls that NodeTyping.process might make
-        allow(node).to receive_messages(respond_to?: false, class: Class.new { def self.name = "TestNode" })
+        allow(node).to receive_messages(
+          respond_to?: false,
+          class: TestNode,
+        )
 
         result = merger.send(:apply_node_typing, node)
         # Should return original node since NodeTyping.process won't wrap it
@@ -380,9 +395,22 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       let(:node_typing) { {heading: ->(n) { n }} }
       let(:merger) { test_merger_class.new("# Test", "# Test", node_typing: node_typing) }
 
+      before do
+        stub_const("TestNode", Class.new {
+          class << self
+            def name
+              "TestNode"
+            end
+          end
+        })
+      end
+
       it "falls back to standard NodeTyping.process" do
         node = double("Node")
-        allow(node).to receive_messages(type: :paragraph, class: Class.new { def self.name = "TestNode" })
+        allow(node).to receive_messages(
+          type: :paragraph,
+          class: TestNode,
+        )
         # Must handle all respond_to? calls including typed_node? check
         allow(node).to receive(:respond_to?) { |m, *| m == :type }
 
@@ -508,8 +536,10 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
         # respond_to? needs to handle both :freeze_node? and :source_position
         allow(node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
-        allow(node).to receive(:freeze_node?).and_return(false)
-        allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
+        allow(node).to receive_messages(
+          freeze_node?: false,
+          source_position: {start_line: 1, end_line: 1},
+        )
 
         entry = {dest_node: node}
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
@@ -570,7 +600,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
           stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
           builder = Markdown::Merge::OutputBuilder.new
 
-          frozen_info = merger_template.send(:process_match_to_builder, entry, builder, stats)
+          merger_template.send(:process_match_to_builder, entry, builder, stats)
 
           expect(builder.to_s).to include("template text")
           expect(stats[:nodes_modified]).to eq(1)
@@ -658,8 +688,10 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         allow(dest_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
         # respond_to? needs to handle both :freeze_node? and :source_position
         allow(dest_node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
-        allow(dest_node).to receive(:freeze_node?).and_return(false)
-        allow(dest_node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
+        allow(dest_node).to receive_messages(
+          freeze_node?: false,
+          source_position: {start_line: 1, end_line: 1},
+        )
 
         allow(merger.dest_analysis).to receive(:source_range).and_return("dest content")
 
@@ -880,8 +912,10 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       end
 
       test_merger_dest_error = Class.new(described_class) do
+        # rubocop:disable ThreadSafety/ClassInstanceVariable -- Test double needs class state
         define_singleton_method(:analysis_class=) { |klass| @analysis_class = klass }
         define_singleton_method(:analysis_class) { @analysis_class }
+        # rubocop:enable ThreadSafety/ClassInstanceVariable
 
         define_method(:create_file_analysis) do |content, **options|
           self.class.analysis_class.new(content, **options)
@@ -1151,7 +1185,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         dest_index: 0,
       }
 
-      frozen_info = merger.send(:process_match_to_builder, entry, builder, stats)
+      merger.send(:process_match_to_builder, entry, builder, stats)
 
       expect(builder.to_s).not_to be_empty
       expect(stats[:nodes_modified]).to eq(1)

@@ -69,7 +69,7 @@ module Markdown
       #
       # @return [Array] Signature array
       def signature
-        if @preceding_node && @preceding_node.respond_to?(:source_position)
+        if @preceding_node&.respond_to?(:source_position)
           pos = @preceding_node.source_position
           preceding_end_line = pos[:end_line] if pos
 

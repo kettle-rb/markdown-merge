@@ -137,9 +137,11 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         allow(node).to receive(:respond_to?).and_return(false)
         allow(node).to receive(:respond_to?).with(:source_position).and_return(true)
         allow(node).to receive(:respond_to?).with(:merge_type).and_return(true)
-        allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 2})
-        allow(node).to receive(:type).and_return(:paragraph)
-        allow(node).to receive(:merge_type).and_return(:paragraph)
+        allow(node).to receive_messages(
+          source_position: {start_line: 1, end_line: 2},
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
         node
       end
 
@@ -160,10 +162,12 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         allow(node).to receive(:respond_to?).with(:type).and_return(true)
         allow(node).to receive(:respond_to?).with(:start_line).and_return(true)
         allow(node).to receive(:respond_to?).with(:end_line).and_return(true)
-        allow(node).to receive(:start_line).and_return(3)
-        allow(node).to receive(:end_line).and_return(5)
-        allow(node).to receive(:type).and_return(:code_block)
-        allow(node).to receive(:merge_type).and_return(:code_block)
+        allow(node).to receive_messages(
+          start_line: 3,
+          end_line: 5,
+          type: :code_block,
+          merge_type: :code_block,
+        )
         node
       end
 
@@ -183,10 +187,12 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         allow(node).to receive(:respond_to?).with(:merge_type).and_return(true)
         allow(node).to receive(:respond_to?).with(:type).and_return(true)
         allow(node).to receive(:respond_to?).with(:to_commonmark).and_return(true)
-        allow(node).to receive(:source_position).and_return({})
-        allow(node).to receive(:to_commonmark).and_return("# Heading\n")
-        allow(node).to receive(:type).and_return(:heading)
-        allow(node).to receive(:merge_type).and_return(:heading)
+        allow(node).to receive_messages(
+          source_position: {},
+          to_commonmark: "# Heading\n",
+          type: :heading,
+          merge_type: :heading,
+        )
         node
       end
 
@@ -251,10 +257,12 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         allow(node).to receive(:respond_to?).with(:type).and_return(true)
         allow(node).to receive(:respond_to?).with(:start_line).and_return(true)
         allow(node).to receive(:respond_to?).with(:end_line).and_return(true)
-        allow(node).to receive(:start_line).and_return(5)
-        allow(node).to receive(:end_line).and_return(7)
-        allow(node).to receive(:type).and_return(:paragraph)
-        allow(node).to receive(:merge_type).and_return(:paragraph)
+        allow(node).to receive_messages(
+          start_line: 5,
+          end_line: 7,
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
         node
       end
 
@@ -275,10 +283,12 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         allow(node).to receive(:respond_to?).with(:type).and_return(true)
         allow(node).to receive(:respond_to?).with(:start_line).and_return(true)
         allow(node).to receive(:respond_to?).with(:end_line).and_return(true)
-        allow(node).to receive(:start_line).and_return(5)
-        allow(node).to receive(:end_line).and_return(7)
-        allow(node).to receive(:type).and_return(:paragraph)
-        allow(node).to receive(:merge_type).and_return(:paragraph)
+        allow(node).to receive_messages(
+          start_line: 5,
+          end_line: 7,
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
         node
       end
 
@@ -301,18 +311,22 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         allow(heading_node).to receive(:respond_to?).with(:source_position).and_return(true)
         allow(heading_node).to receive(:respond_to?).with(:merge_type).and_return(true)
         allow(heading_node).to receive(:respond_to?).with(:type).and_return(true)
-        allow(heading_node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
-        allow(heading_node).to receive(:type).and_return(:heading)
-        allow(heading_node).to receive(:merge_type).and_return(:heading)
+        allow(heading_node).to receive_messages(
+          source_position: {start_line: 1, end_line: 1},
+          type: :heading,
+          merge_type: :heading,
+        )
 
         paragraph_node = double("ParagraphNode")
         allow(paragraph_node).to receive(:respond_to?).and_return(false)
         allow(paragraph_node).to receive(:respond_to?).with(:source_position).and_return(true)
         allow(paragraph_node).to receive(:respond_to?).with(:merge_type).and_return(true)
         allow(paragraph_node).to receive(:respond_to?).with(:type).and_return(true)
-        allow(paragraph_node).to receive(:source_position).and_return({start_line: 3, end_line: 3})
-        allow(paragraph_node).to receive(:type).and_return(:paragraph)
-        allow(paragraph_node).to receive(:merge_type).and_return(:paragraph)
+        allow(paragraph_node).to receive_messages(
+          source_position: {start_line: 3, end_line: 3},
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
 
         builder.add_node_source(heading_node, analysis)
         builder.add_node_source(paragraph_node, analysis)

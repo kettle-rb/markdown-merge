@@ -296,7 +296,7 @@ module Markdown
         # Apply whitespace normalization if enabled
         if @normalize_whitespace
           # Support both boolean and symbol modes
-          mode = @normalize_whitespace == true ? :basic : @normalize_whitespace
+          mode = (@normalize_whitespace == true) ? :basic : @normalize_whitespace
           normalizer = WhitespaceNormalizer.new(content, mode: mode)
           content = normalizer.normalize
           problems.merge!(normalizer.problems)
@@ -351,7 +351,7 @@ module Markdown
         # Try inner-merge for code blocks first
         if @code_block_merger && code_block_node?(template_node) && code_block_node?(dest_node)
           inner_result = try_inner_merge_code_block_to_builder(template_node, dest_node, builder, stats)
-          return nil if inner_result
+          return if inner_result
         end
 
         resolution = @resolver.resolve(
@@ -539,7 +539,6 @@ module Markdown
       def process_dest_only_to_builder(entry, builder, stats)
         node = entry[:dest_node]
 
-
         frozen_info = nil
 
         if node.respond_to?(:freeze_node?) && node.freeze_node?
@@ -594,7 +593,7 @@ module Markdown
         DebugLogger.debug("Checking if gap line is document-trailing", {
           gap_line_number: gap_line.line_number,
           gap_index: gap_index,
-          total_statements: statements.length
+          total_statements: statements.length,
         })
 
         return true if gap_index.nil? # Shouldn't happen, but treat as trailing if missing
@@ -607,7 +606,7 @@ module Markdown
           unless node.is_a?(GapLineNode)
             DebugLogger.debug("Found content after gap line", {
               next_node_index: i,
-              next_node_type: node.class.name
+              next_node_type: node.class.name,
             })
             return false
           end

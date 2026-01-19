@@ -32,12 +32,14 @@ module Markdown
       # @return [DocumentProblems] Problems found during rehydration
       attr_reader :problems
 
-      # Rehydrate inline links/images to reference style (class method).
-      #
-      # @param content [String] Content to rehydrate
-      # @return [String] Rehydrated content
-      def self.rehydrate(content)
-        new(content).rehydrate
+      class << self
+        # Rehydrate inline links/images to reference style (class method).
+        #
+        # @param content [String] Content to rehydrate
+        # @return [String] Rehydrated content
+        def rehydrate(content)
+          new(content).rehydrate
+        end
       end
 
       # Initialize a new rehydrator.
@@ -137,7 +139,7 @@ module Markdown
         replacements = []
 
         items.each do |item|
-          if item[:children] && item[:children].any?
+          if item[:children]&.any?
             # Process children first and collect their replacements
             child_replacements = collect_nested_replacements(item[:children], text)
 
@@ -179,7 +181,7 @@ module Markdown
       def process_parent_with_children(item, child_replacements)
         # Get the label for the parent's URL
         label = @url_to_label[item[:url]]
-        return nil unless label
+        return unless label
 
         # Check if parent has a title (can't rehydrate if it does)
         if item[:title] && !item[:title].empty?
@@ -190,7 +192,7 @@ module Markdown
             url: item[:url],
             title: item[:title],
           )
-          return nil
+          return
         end
 
         # Build the new link text by applying child replacements to the original text
@@ -260,7 +262,6 @@ module Markdown
         end
       end
 
-
       def process_link(link)
         url = link[:url]
         title = link[:title]
@@ -274,11 +275,11 @@ module Markdown
             url: url,
             title: title,
           )
-          return nil
+          return
         end
 
         label = @url_to_label[url]
-        return nil unless label
+        return unless label
 
         @rehydration_count += 1
         {
@@ -301,11 +302,11 @@ module Markdown
             url: url,
             title: title,
           )
-          return nil
+          return
         end
 
         label = @url_to_label[url]
-        return nil unless label
+        return unless label
 
         @rehydration_count += 1
         {

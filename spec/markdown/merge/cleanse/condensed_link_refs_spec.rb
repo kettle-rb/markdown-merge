@@ -247,9 +247,7 @@ RSpec.describe Markdown::Merge::Cleanse::CondensedLinkRefs do
       lines = result.strip.split("\n")
 
       expect(lines.size).to eq(6)
-      lines.each do |line|
-        expect(line).to match(/^\[[^\]]+\]: https?:\/\//)
-      end
+      expect(lines).to all(match(/^\[[^\]]+\]: https?:\/\//))
     end
   end
 

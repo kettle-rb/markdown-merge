@@ -12,6 +12,7 @@ AllCops:
     - certs/**/*
     - checksums/**/*
     - docs/**/*
+    - examples/**/*
     - fixtures/**/*
     - gemfiles/*.gemfile
     - gemfiles/.bundle/**/*

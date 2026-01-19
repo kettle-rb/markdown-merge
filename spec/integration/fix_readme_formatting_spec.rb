@@ -3,7 +3,7 @@
 # Integration tests for bin/fix_readme_formatting script
 # These tests run the script against fixtures and validate the output
 
-RSpec.describe "bin/fix_readme_formatting integration" do
+RSpec.describe "bin/fix_readme_formatting integration", :markdown_parsing do
   let(:fixtures_dir) { File.expand_path("../fixtures/01_cleanse", __dir__) }
   let(:destination_file) { File.join(fixtures_dir, "destination.md") }
   let(:expected_file) { File.join(fixtures_dir, "expected.md") }

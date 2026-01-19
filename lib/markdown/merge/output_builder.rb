@@ -49,7 +49,7 @@ module Markdown
         # - Otherwise, check MarkdownStructure.needs_blank_between? which handles
         #   contiguous types (like link_definitions that shouldn't have blanks between them)
         unless [:gap_line, :freeze_block].include?(current_type) ||
-               @last_node_type == :gap_line
+            @last_node_type == :gap_line
           if @auto_spacing && @last_node_type && current_type
             if MarkdownStructure.needs_blank_between?(@last_node_type, current_type)
               # Only add spacing if we don't already have adequate blank lines
@@ -155,18 +155,12 @@ module Markdown
         end
 
         # Try direct start_line/end_line attributes
-        return nil unless node.respond_to?(:start_line) && node.respond_to?(:end_line)
-        return nil unless node.start_line && node.end_line
+        return unless node.respond_to?(:start_line) && node.respond_to?(:end_line)
+        return unless node.start_line && node.end_line
 
-        if @preserve_formatting
-          # Extract original source range
-          analysis.source_range(node.start_line, node.end_line)
-        else
-          # Could implement normalization here if needed
-          analysis.source_range(node.start_line, node.end_line)
-        end
+        # Extract source range (formatting preservation handled elsewhere)
+        analysis.source_range(node.start_line, node.end_line)
       end
     end
   end
 end
-

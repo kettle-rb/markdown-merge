@@ -73,8 +73,8 @@ RSpec.describe Markdown::Merge::LinkParser do
 
     it "returns items unchanged when no nesting" do
       links = [
-        { start_pos: 0, end_pos: 10, text: "a", url: "url1" },
-        { start_pos: 20, end_pos: 30, text: "b", url: "url2" },
+        {start_pos: 0, end_pos: 10, text: "a", url: "url1"},
+        {start_pos: 20, end_pos: 30, text: "b", url: "url2"},
       ]
       result = parser.build_link_tree(links, [])
 
@@ -84,8 +84,8 @@ RSpec.describe Markdown::Merge::LinkParser do
     end
 
     it "nests image inside link when positions indicate containment" do
-      links = [{ start_pos: 0, end_pos: 50, text: "![img](url1)", url: "url2" }]
-      images = [{ start_pos: 1, end_pos: 20, alt: "img", url: "url1" }]
+      links = [{start_pos: 0, end_pos: 50, text: "![img](url1)", url: "url2"}]
+      images = [{start_pos: 1, end_pos: 20, alt: "img", url: "url1"}]
 
       result = parser.build_link_tree(links, images)
 
@@ -96,8 +96,8 @@ RSpec.describe Markdown::Merge::LinkParser do
     end
 
     it "does not nest items that are not contained" do
-      links = [{ start_pos: 0, end_pos: 20, text: "a", url: "url1" }]
-      images = [{ start_pos: 25, end_pos: 40, alt: "b", url: "url2" }]
+      links = [{start_pos: 0, end_pos: 20, text: "a", url: "url1"}]
+      images = [{start_pos: 25, end_pos: 40, alt: "b", url: "url2"}]
 
       result = parser.build_link_tree(links, images)
 
@@ -115,8 +115,8 @@ RSpec.describe Markdown::Merge::LinkParser do
 
     it "returns items unchanged when no nesting" do
       items = [
-        { type: :link, start_pos: 0, end_pos: 10 },
-        { type: :image, start_pos: 20, end_pos: 30 },
+        {type: :link, start_pos: 0, end_pos: 10},
+        {type: :image, start_pos: 20, end_pos: 30},
       ]
       result = parser.flatten_leaf_first(items)
 
@@ -131,7 +131,7 @@ RSpec.describe Markdown::Merge::LinkParser do
           start_pos: 0,
           end_pos: 50,
           children: [
-            { type: :image, start_pos: 1, end_pos: 20 },
+            {type: :image, start_pos: 1, end_pos: 20},
           ],
         },
       ]
@@ -156,7 +156,7 @@ RSpec.describe Markdown::Merge::LinkParser do
               start_pos: 1,
               end_pos: 50,
               children: [
-                { type: :image, start_pos: 2, end_pos: 20 },
+                {type: :image, start_pos: 2, end_pos: 20},
               ],
             },
           ],
@@ -175,7 +175,7 @@ RSpec.describe Markdown::Merge::LinkParser do
           type: :link,
           start_pos: 0,
           end_pos: 50,
-          children: [{ type: :image, start_pos: 1, end_pos: 20 }],
+          children: [{type: :image, start_pos: 1, end_pos: 20}],
         },
       ]
       result = parser.flatten_leaf_first(items)
@@ -191,14 +191,14 @@ RSpec.describe Markdown::Merge::LinkParser do
           type: :link,
           start_pos: 0,
           end_pos: 50,
-          children: [{ type: :image, start_pos: 1, end_pos: 20 }],
+          children: [{type: :image, start_pos: 1, end_pos: 20}],
         },
-        { type: :link, start_pos: 60, end_pos: 80 },
+        {type: :link, start_pos: 60, end_pos: 80},
         {
           type: :link,
           start_pos: 90,
           end_pos: 150,
-          children: [{ type: :image, start_pos: 91, end_pos: 120 }],
+          children: [{type: :image, start_pos: 91, end_pos: 120}],
         },
       ]
       result = parser.flatten_leaf_first(items)

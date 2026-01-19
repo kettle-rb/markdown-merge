@@ -46,7 +46,7 @@ module Markdown
 
         rule(:url_char) { match('[^\s>]') }
         rule(:bare_url) { url_char.repeat(1) }
-        rule(:angled_url_char) { match('[^>]') }
+        rule(:angled_url_char) { match("[^>]") }
         rule(:angled_url) { str("<") >> angled_url_char.repeat(1) >> str(">") }
         rule(:url) { (angled_url | bare_url).as(:url) }
 
@@ -239,7 +239,7 @@ module Markdown
       def build_link_tree(links, images)
         # Combine all items
         all_items = links.map { |l| l.merge(type: :link) } +
-                   images.map { |i| i.merge(type: :image) }
+          images.map { |i| i.merge(type: :image) }
 
         # Sort by start position
         sorted = all_items.sort_by { |item| item[:start_pos] }
@@ -254,8 +254,8 @@ module Markdown
           # Find any items nested inside this one
           children = sorted.select do |other|
             other[:start_pos] > item[:start_pos] &&
-            other[:end_pos] <= item[:end_pos] &&
-            other != item
+              other[:end_pos] <= item[:end_pos] &&
+              other != item
           end
 
           if children.any?
@@ -327,15 +327,15 @@ module Markdown
         remaining = content[start_idx..]
 
         # Find the closing ) by tracking balanced brackets/parens
-        bracket_end = find_bracket_end(remaining, type == :image ? 1 : 0)
-        return nil unless bracket_end
+        bracket_end = find_bracket_end(remaining, (type == :image) ? 1 : 0)
+        return unless bracket_end
 
         # Check for ( after ]
-        return nil if bracket_end + 1 >= remaining.length
-        return nil unless remaining[bracket_end + 1] == "("
+        return if bracket_end + 1 >= remaining.length
+        return unless remaining[bracket_end + 1] == "("
 
         paren_end = find_paren_end(remaining, bracket_end + 1)
-        return nil unless paren_end
+        return unless paren_end
 
         # Extract the substring and try to parse it
         substring = remaining[0..paren_end]

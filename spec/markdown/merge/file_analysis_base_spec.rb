@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable RSpec/RepeatedExampleGroupDescription
 RSpec.describe Markdown::Merge::FileAnalysisBase do
   # Create a concrete implementation for testing
   let(:test_class) do
@@ -1059,3 +1060,4 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
     end
   end
 end
+# rubocop:enable RSpec/RepeatedExampleGroupDescription

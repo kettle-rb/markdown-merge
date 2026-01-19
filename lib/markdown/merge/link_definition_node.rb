@@ -71,7 +71,7 @@ module Markdown
         # Shared parser instance for parsing link definitions
         # @return [LinkParser]
         def parser
-          @parser ||= LinkParser.new
+          @parser ||= LinkParser.new # rubocop:disable ThreadSafety/ClassInstanceVariable
         end
 
         # Parse a line and create a LinkDefinitionNode if it's a link definition.

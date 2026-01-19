@@ -3,7 +3,7 @@
 # Integration tests for link reference rehydration
 # Uses the 02_rehydrate fixture set
 
-RSpec.describe "Link Reference Rehydration integration" do
+RSpec.describe "Link Reference Rehydration integration", :markdown_parsing do
   let(:fixtures_dir) { File.expand_path("../fixtures/02_rehydrate", __dir__) }
   let(:destination_file) { File.join(fixtures_dir, "destination.md") }
   let(:expected_file) { File.join(fixtures_dir, "expected.md") }

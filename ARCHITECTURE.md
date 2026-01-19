@@ -345,7 +345,7 @@ sig_gen = ->(node) {
 merger = SmartMerger.new(
   template,
   destination,
-  signature_generator: sig_gen
+  signature_generator: sig_gen,
 )
 ```
 
@@ -359,7 +359,7 @@ refiner = TableMatchRefiner.new(similarity_threshold: 0.7)
 merger = SmartMerger.new(
   template,
   destination,
-  match_refiner: refiner
+  match_refiner: refiner,
 )
 ```
 
@@ -392,8 +392,8 @@ merger = SmartMerger.new(template, destination)
 result = merger.merge
 
 # Verify result
-expect(result.success?).to be true
-expect(result.content).to include("expected content")
+expect(result.success?).to(be(true))
+expect(result.content).to(include("expected content"))
 ```
 
 ## Performance Considerations

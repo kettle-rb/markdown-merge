@@ -47,4 +47,3 @@ module Markdown
     end
   end
 end
-

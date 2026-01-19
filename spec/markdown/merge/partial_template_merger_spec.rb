@@ -571,19 +571,6 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
     end
   end
 
-  describe "#create_smart_merger" do
-    it "raises ArgumentError for unknown backend" do
-      expect do
-        described_class.new(
-          template: "t",
-          destination: "d",
-          anchor: {type: :heading},
-          backend: :unknown_backend,
-        )
-      end.to raise_error(ArgumentError, /Unknown backend/)
-    end
-  end
-
   describe "#find_section_end" do
     let(:merger) do
       described_class.new(

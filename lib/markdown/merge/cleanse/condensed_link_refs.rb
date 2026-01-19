@@ -103,7 +103,7 @@ module Markdown
           rule(:bare_url) { url_char.repeat(1) }
 
           # Angled URLs can contain [ since they're delimited by <>
-          rule(:angled_url_char) { match('[^>]') }
+          rule(:angled_url_char) { match("[^>]") }
           rule(:angled_url) { str("<") >> angled_url_char.repeat(1) >> str(">") }
 
           rule(:url) { (angled_url | bare_url).as(:url) }
@@ -224,7 +224,7 @@ module Markdown
         # @return [String] cleaned URL
         def clean_url(url)
           url = url.strip
-          url.start_with?("<") && url.end_with?(">") ? url[1..-2] : url
+          (url.start_with?("<") && url.end_with?(">")) ? url[1..-2] : url
         end
       end
     end

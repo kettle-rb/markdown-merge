@@ -2,29 +2,36 @@
 
 # Diagnostic tests to verify markdown backends are available
 # Uses :markdown_parsing tag - tests only run when commonmarker or markly is available
-
+#
+# These tests intentionally:
+# - Use a string describe (not a class) because they test infrastructure, not a specific class
+# - Use puts for diagnostic output visible in CI logs
+# - Use expect([true, false]).to include() to verify boolean return without asserting which value
+#
+# rubocop:disable RSpec/DescribeClass -- diagnostic tests for infrastructure, not a specific class
+# rubocop:disable RSpec/Output -- intentional diagnostic output for CI visibility
 RSpec.describe "Backend Availability" do
   describe "Commonmarker backend" do
     it "reports availability status via BackendRegistry" do
       status = TreeHaver::BackendRegistry.available?(:commonmarker)
-      puts "Commonmarker available: #{status}"
-      expect([true, false]).to include(status)
+      puts "Commonmarker available: #{status}" # rubocop:disable RSpec/Output
+      expect(status).to be(true).or be(false)
     end
   end
 
   describe "Markly backend" do
     it "reports availability status via BackendRegistry" do
       status = TreeHaver::BackendRegistry.available?(:markly)
-      puts "Markly available: #{status}"
-      expect([true, false]).to include(status)
+      puts "Markly available: #{status}" # rubocop:disable RSpec/Output
+      expect(status).to be(true).or be(false)
     end
   end
 
   describe "TreeHaver::RSpec::DependencyTags" do
     it "reports markdown backend availability" do
       status = TreeHaver::RSpec::DependencyTags.any_markdown_backend_available?
-      puts "Any markdown backend available: #{status}"
-      expect([true, false]).to include(status)
+      puts "Any markdown backend available: #{status}" # rubocop:disable RSpec/Output
+      expect(status).to be(true).or be(false)
     end
   end
 
@@ -39,7 +46,7 @@ RSpec.describe "Backend Availability" do
 
     it "resolves a backend" do
       analysis = described_class.new(simple_markdown)
-      expect([:commonmarker, :markly]).to include(analysis.backend)
+      expect(analysis.backend).to eq(:commonmarker).or eq(:markly)
     end
 
     it "parses statements" do
@@ -99,3 +106,4 @@ RSpec.describe "Backend Availability" do
     end
   end
 end
+# rubocop:enable RSpec/DescribeClass, RSpec/Output

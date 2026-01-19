@@ -197,4 +197,3 @@ RSpec.describe Markdown::Merge::DocumentProblems do
     end
   end
 end
-

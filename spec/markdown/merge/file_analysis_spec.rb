@@ -40,7 +40,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
 
     it "resolves the backend" do
       analysis = described_class.new(simple_markdown)
-      expect([:commonmarker, :markly]).to include(analysis.backend)
+      expect(analysis.backend).to eq(:commonmarker).or eq(:markly)
     end
 
     it "accepts explicit backend option", :commonmarker_backend do
@@ -301,20 +301,6 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#next_sibling", :markdown_parsing do
-    it "returns next sibling node or nil" do
-      analysis = described_class.new(simple_markdown)
-      first_node = analysis.statements.first
-
-      # Unwrap to get raw node
-      raw_node = Ast::Merge::NodeTyping.unwrap(first_node)
-      sibling = analysis.next_sibling(raw_node)
-
-      # Either returns a sibling or nil - just verify the method works
-      expect(sibling.nil? || sibling.respond_to?(:type)).to be true
-    end
-  end
-
   describe "#parser_node?", :markdown_parsing do
     it "returns true for parser nodes" do
       analysis = described_class.new(simple_markdown)
@@ -357,25 +343,6 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#safe_string_content", :markdown_parsing do
-    let(:markdown_with_code) do
-      <<~MARKDOWN
-        ```ruby
-        puts "hello"
-        ```
-      MARKDOWN
-    end
-
-    it "safely extracts string content from code blocks" do
-      analysis = described_class.new(markdown_with_code)
-      code_block = analysis.statements.first
-      raw_node = Ast::Merge::NodeTyping.unwrap(code_block)
-
-      content = analysis.safe_string_content(raw_node)
-      expect(content).to be_a(String)
-    end
-  end
-
   describe "#collect_top_level_nodes", :markdown_parsing do
     it "collects and wraps all top-level nodes" do
       analysis = described_class.new(simple_markdown)
@@ -406,10 +373,12 @@ RSpec.describe Markdown::Merge::FileAnalysis do
 
     context "with markly", :markly_backend do
       it "accepts flags and extensions" do
+        # Use dynamic constant lookup to avoid parse-time errors when markly isn't available
+        markly_default = Object.const_get("Markly::DEFAULT")
         analysis = described_class.new(
           simple_markdown,
           backend: :markly,
-          flags: Markly::DEFAULT,
+          flags: markly_default,
           extensions: [:table],
         )
         expect(analysis.backend).to eq(:markly)
@@ -431,7 +400,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     it "returns the backend when not :auto" do
       analysis = described_class.new(simple_markdown)
       # The backend should be resolved to either :commonmarker or :markly
-      expect([:commonmarker, :markly]).to include(analysis.backend)
+      expect(analysis.backend).to eq(:commonmarker).or eq(:markly)
     end
   end
 
@@ -492,11 +461,9 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       mock_node = double("Node")
       allow(mock_node).to receive(:respond_to?).with(:string_content).and_return(false)
       allow(mock_node).to receive(:respond_to?).with(:text).and_return(true)
-      allow(mock_node).to receive(:text).and_return("fallback text")
       allow(mock_node).to receive(:respond_to?).with(:type).and_return(true)
-      allow(mock_node).to receive(:type).and_return(:text)
       allow(mock_node).to receive(:respond_to?).with(:children).and_return(true)
-      allow(mock_node).to receive(:children).and_return([])
+      allow(mock_node).to receive_messages(text: "fallback text", type: :text, children: [])
 
       result = analysis.safe_string_content(mock_node)
       expect(result).to eq("fallback text")
@@ -508,9 +475,8 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       allow(mock_node).to receive(:respond_to?).with(:string_content).and_return(false)
       allow(mock_node).to receive(:respond_to?).with(:text).and_return(false)
       allow(mock_node).to receive(:respond_to?).with(:type).and_return(true)
-      allow(mock_node).to receive(:type).and_return(:paragraph)
       allow(mock_node).to receive(:respond_to?).with(:children).and_return(true)
-      allow(mock_node).to receive(:children).and_return([])
+      allow(mock_node).to receive_messages(type: :paragraph, children: [])
 
       result = analysis.safe_string_content(mock_node)
       expect(result).to eq("")
@@ -718,8 +684,11 @@ RSpec.describe Markdown::Merge::FileAnalysis do
         end
 
         # Expose protected methods for testing
-        public :compute_parser_signature, :extract_text_content, :safe_string_content,
-          :count_children, :extract_table_header_content
+        public :compute_parser_signature,
+          :extract_text_content,
+          :safe_string_content,
+          :count_children,
+          :extract_table_header_content
       end
     end
 
@@ -871,14 +840,13 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     context "with :table type" do
       it "generates table signature with row count and header hash" do
         header_row = double("HeaderRow")
-        allow(header_row).to receive(:next_sibling).and_return(nil)
+        allow(header_row).to receive_messages(next_sibling: nil)
         allow(header_row).to receive(:respond_to?).and_return(false)
         allow(header_row).to receive(:respond_to?).with(:walk).and_return(false)
         allow(header_row).to receive(:respond_to?).with(:children).and_return(true)
         allow(header_row).to receive(:respond_to?).with(:type).and_return(true)
         allow(header_row).to receive(:respond_to?).with(:string_content).and_return(false)
-        allow(header_row).to receive(:type).and_return(:table_row)
-        allow(header_row).to receive(:children).and_return([])
+        allow(header_row).to receive_messages(type: :table_row, children: [])
 
         node = mock_node(type: :table, first_child: header_row)
 

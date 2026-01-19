@@ -26,7 +26,6 @@ end
 # this library
 require "markdown/merge"
 
-
 # TreeHaver test helpers (TestableNode for creating mock nodes)
 require "tree_haver/rspec/testable_node"
 

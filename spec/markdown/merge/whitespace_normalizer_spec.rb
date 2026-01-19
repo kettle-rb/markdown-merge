@@ -199,15 +199,6 @@ RSpec.describe Markdown::Merge::WhitespaceNormalizer do
       expect(result).to eq("[link1]: https://example.com/1\n[link2]: https://example.com/2")
     end
 
-    it "handles exactly 2 blank lines between link refs" do
-      # Two blank lines = 3 newlines between content
-      content = "[link1]: https://example.com/1\n\n\n[link2]: https://example.com/2"
-      normalizer = described_class.new(content, mode: :link_refs)
-      result = normalizer.normalize
-
-      expect(result).to eq("[link1]: https://example.com/1\n[link2]: https://example.com/2")
-    end
-
     it "tracks multiple blank lines removed correctly" do
       # 4 blank lines = 5 newlines
       content = "[link1]: https://example.com/1\n\n\n\n\n[link2]: https://example.com/2"

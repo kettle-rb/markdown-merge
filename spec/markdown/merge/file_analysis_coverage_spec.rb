@@ -3,6 +3,7 @@
 # Direct coverage tests for file_analysis.rb
 # Uses :markdown_backend tag - tests only run when commonmarker or markly is available
 
+# rubocop:disable RSpec/DescribeMethod, RSpec/ExpectActual
 RSpec.describe Markdown::Merge::FileAnalysis, "coverage", :markdown_parsing do
   let(:simple_markdown) { "# Hello\n\nWorld paragraph." }
 
@@ -265,9 +266,11 @@ RSpec.describe Markdown::Merge::FileAnalysis, "coverage", :markdown_parsing do
         analysis = described_class.new(simple_markdown)
         # Create a mock node with an unknown type
         mock_node = double("UnknownNode")
-        allow(mock_node).to receive(:type).and_return(:super_custom_type)
+        allow(mock_node).to receive_messages(
+          type: :super_custom_type,
+          source_position: {start_line: 1, end_line: 1},
+        )
         allow(mock_node).to receive(:respond_to?).with(:type).and_return(true)
-        allow(mock_node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
 
         # The signature should handle this gracefully
         sig = analysis.compute_parser_signature(mock_node)
@@ -291,3 +294,4 @@ RSpec.describe Markdown::Merge::FileAnalysis, "coverage", :markdown_parsing do
     end
   end
 end
+# rubocop:enable RSpec/DescribeMethod, RSpec/ExpectActual

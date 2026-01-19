@@ -43,13 +43,15 @@ module Markdown
       # @return [DocumentProblems] Problems found during normalization
       attr_reader :problems
 
-      # Normalize whitespace in content (class method for convenience).
-      #
-      # @param content [String] Content to normalize
-      # @param mode [Symbol, Boolean] Normalization mode (:basic, :link_refs, :strict, or true for :basic)
-      # @return [String] Normalized content
-      def self.normalize(content, mode: :basic)
-        new(content, mode: mode).normalize
+      class << self
+        # Normalize whitespace in content (class method for convenience).
+        #
+        # @param content [String] Content to normalize
+        # @param mode [Symbol, Boolean] Normalization mode (:basic, :link_refs, :strict, or true for :basic)
+        # @return [String] Normalized content
+        def normalize(content, mode: :basic)
+          new(content, mode: mode).normalize
+        end
       end
 
       # Initialize a new normalizer.

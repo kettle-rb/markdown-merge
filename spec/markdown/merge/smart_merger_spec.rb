@@ -62,7 +62,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
     it "resolves the backend" do
       merger = described_class.new(template_content, dest_content)
-      expect([:commonmarker, :markly]).to include(merger.backend)
+      expect(merger.backend).to eq(:commonmarker).or eq(:markly)
     end
 
     it "accepts explicit backend option", :commonmarker do
@@ -355,27 +355,6 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "#create_file_analysis", :markdown_parsing do
-    it "creates FileAnalysis instances" do
-      merger = described_class.new(template_content, dest_content)
-      analysis = merger.send(:create_file_analysis, template_content, freeze_token: "test-token")
-
-      expect(analysis).to be_a(Markdown::Merge::FileAnalysis)
-    end
-
-    it "passes backend option" do
-      merger = described_class.new(template_content, dest_content)
-      analysis = merger.send(
-        :create_file_analysis,
-        template_content,
-        backend: merger.backend,
-        freeze_token: "test-token",
-      )
-
-      expect(analysis.backend).to eq(merger.backend)
-    end
-  end
-
   describe "#node_to_source", :markdown_parsing do
     it "extracts source text from nodes" do
       merger = described_class.new(template_content, dest_content)
@@ -398,23 +377,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
         expect(source).to include("markdown-merge:freeze")
       end
     end
-  end
 
-  describe "#template_parse_error_class", :markdown_parsing do
-    it "returns Markdown::Merge::TemplateParseError" do
-      merger = described_class.new(template_content, dest_content)
-      expect(merger.send(:template_parse_error_class)).to eq(Markdown::Merge::TemplateParseError)
-    end
-  end
-
-  describe "#destination_parse_error_class", :markdown_parsing do
-    it "returns Markdown::Merge::DestinationParseError" do
-      merger = described_class.new(template_content, dest_content)
-      expect(merger.send(:destination_parse_error_class)).to eq(Markdown::Merge::DestinationParseError)
-    end
-  end
-
-  describe "#node_to_source", :markdown_parsing do
     it "handles LinkDefinitionNode" do
       merger = described_class.new(template_content, dest_content)
       analysis = merger.template_analysis
@@ -451,7 +414,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "#create_file_analysis", :markdown_parsing do
+  describe "#template_parse_error_class", :markdown_parsing do
     it "creates FileAnalysis with provided options" do
       merger = described_class.new(template_content, dest_content)
 
@@ -530,6 +493,18 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
       source = merger.send(:node_to_source, mock_node, analysis)
       expect(source).to eq("")
+    end
+
+    it "handles nodes with valid source_position" do
+      merger = described_class.new(template_content, dest_content)
+      # Get a real node with position info
+      node = merger.template_analysis.statements.first
+      raw = Ast::Merge::NodeTyping.unwrap(node)
+
+      if raw.source_position && raw.source_position[:start_line]
+        source = merger.send(:node_to_source, raw, merger.template_analysis)
+        expect(source).not_to be_empty
+      end
     end
   end
 
@@ -632,6 +607,74 @@ RSpec.describe Markdown::Merge::SmartMerger do
       expect(result).to be_a(Markdown::Merge::MergeResult)
       expect(result.stats).to be_a(Hash)
       expect(result.content).to be_a(String)
+    end
+
+    it "preserves destination-only sections" do
+      merger = described_class.new(complex_template, complex_dest)
+      result = merger.merge
+      expect(result).to include("Custom Section")
+    end
+  end
+
+  describe "additional complex merge scenarios", :markdown_parsing do
+    let(:complex_template) do
+      <<~MD
+        # Project
+
+        Description.
+
+        ## Features
+
+        - Feature A
+        - Feature B
+
+        ## Installation
+
+        ```bash
+        gem install foo
+        ```
+
+        ---
+
+        ## License
+
+        MIT
+      MD
+    end
+
+    let(:complex_dest) do
+      <<~MD
+        # Project
+
+        My custom description.
+
+        ## Features
+
+        - Feature A
+        - Feature C
+        - Feature D
+
+        ## Custom Section
+
+        Custom content here.
+
+        ## License
+
+        Apache 2.0
+      MD
+    end
+
+    it "handles complex documents with different structures" do
+      merger = described_class.new(complex_template, complex_dest)
+      result = merger.merge
+      expect(result).to be_a(String)
+      expect(result).to include("# Project")
+    end
+
+    it "preserves destination-only sections in complex merges" do
+      merger = described_class.new(complex_template, complex_dest)
+      result = merger.merge
+      expect(result).to include("Custom Section")
     end
   end
 

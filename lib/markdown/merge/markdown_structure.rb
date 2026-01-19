@@ -49,74 +49,75 @@ module Markdown
         link_definition
       ].freeze
 
-      # Check if a node type needs a blank line before it
-      #
-      # @param node_type [Symbol, String] Node type to check
-      # @return [Boolean]
-      def self.needs_blank_before?(node_type)
-        NEEDS_BLANK_BEFORE.include?(node_type.to_sym)
-      end
-
-      # Check if a node type needs a blank line after it
-      #
-      # @param node_type [Symbol, String] Node type to check
-      # @return [Boolean]
-      def self.needs_blank_after?(node_type)
-        NEEDS_BLANK_AFTER.include?(node_type.to_sym)
-      end
-
-      # Check if a node type is a contiguous type (should not have blank lines
-      # between consecutive nodes of the same type).
-      #
-      # @param node_type [Symbol, String] Node type to check
-      # @return [Boolean]
-      def self.contiguous_type?(node_type)
-        CONTIGUOUS_TYPES.include?(node_type.to_sym)
-      end
-
-      # Check if we should insert a blank line between two node types
-      #
-      # Rules:
-      # 1. If both types are the same contiguous type, NO blank line
-      # 2. If previous node needs blank after, YES blank line
-      # 3. If next node needs blank before, YES blank line
-      #
-      # @param prev_type [Symbol, String, nil] Previous node type
-      # @param next_type [Symbol, String, nil] Next node type
-      # @return [Boolean]
-      def self.needs_blank_between?(prev_type, next_type)
-        return false if prev_type.nil? || next_type.nil?
-
-        prev_sym = prev_type.to_sym
-        next_sym = next_type.to_sym
-
-        # Same contiguous type - no blank line between them
-        if prev_sym == next_sym && contiguous_type?(prev_sym)
-          return false
+      class << self
+        # Check if a node type needs a blank line before it
+        #
+        # @param node_type [Symbol, String] Node type to check
+        # @return [Boolean]
+        def needs_blank_before?(node_type)
+          NEEDS_BLANK_BEFORE.include?(node_type.to_sym)
         end
 
-        needs_blank_after?(prev_sym) || needs_blank_before?(next_sym)
-      end
+        # Check if a node type needs a blank line after it
+        #
+        # @param node_type [Symbol, String] Node type to check
+        # @return [Boolean]
+        def needs_blank_after?(node_type)
+          NEEDS_BLANK_AFTER.include?(node_type.to_sym)
+        end
 
-      # Get the node type from a node object
-      #
-      # Priority order:
-      # 1. merge_type - Explicit merge behavior classification (preferred)
-      # 2. type - Parser-specific type fallback
-      #
-      # @param node [Object] Node to get type from
-      # @return [Symbol, nil] Node type
-      def self.node_type(node)
-        return nil unless node
+        # Check if a node type is a contiguous type (should not have blank lines
+        # between consecutive nodes of the same type).
+        #
+        # @param node_type [Symbol, String] Node type to check
+        # @return [Boolean]
+        def contiguous_type?(node_type)
+          CONTIGUOUS_TYPES.include?(node_type.to_sym)
+        end
 
-        # Prefer merge_type when available - it's the explicit merge behavior classifier
-        if node.respond_to?(:merge_type)
-          node.merge_type.to_sym
-        elsif node.respond_to?(:type)
-          node.type.to_sym
+        # Check if we should insert a blank line between two node types
+        #
+        # Rules:
+        # 1. If both types are the same contiguous type, NO blank line
+        # 2. If previous node needs blank after, YES blank line
+        # 3. If next node needs blank before, YES blank line
+        #
+        # @param prev_type [Symbol, String, nil] Previous node type
+        # @param next_type [Symbol, String, nil] Next node type
+        # @return [Boolean]
+        def needs_blank_between?(prev_type, next_type)
+          return false if prev_type.nil? || next_type.nil?
+
+          prev_sym = prev_type.to_sym
+          next_sym = next_type.to_sym
+
+          # Same contiguous type - no blank line between them
+          if prev_sym == next_sym && contiguous_type?(prev_sym)
+            return false
+          end
+
+          needs_blank_after?(prev_sym) || needs_blank_before?(next_sym)
+        end
+
+        # Get the node type from a node object
+        #
+        # Priority order:
+        # 1. merge_type - Explicit merge behavior classification (preferred)
+        # 2. type - Parser-specific type fallback
+        #
+        # @param node [Object] Node to get type from
+        # @return [Symbol, nil] Node type
+        def node_type(node)
+          return unless node
+
+          # Prefer merge_type when available - it's the explicit merge behavior classifier
+          if node.respond_to?(:merge_type)
+            node.merge_type.to_sym
+          elsif node.respond_to?(:type)
+            node.type.to_sym
+          end
         end
       end
     end
   end
 end
-
