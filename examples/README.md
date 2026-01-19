@@ -81,7 +81,7 @@ markdown-merge leverages tree_haver's Position API:
 
 ```ruby
 node.start_line       # 1-based line number
-node.end_line         # 1-based line number  
+node.end_line         # 1-based line number
 node.source_position  # {start_line:, end_line:, start_column:, end_column:}
 node.first_child      # Navigate structure
 ```

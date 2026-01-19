@@ -368,8 +368,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       it "falls back to standard NodeTyping.process" do
         node = double("Node")
         # Must handle all respond_to? calls that NodeTyping.process might make
-        allow(node).to receive(:respond_to?) { |m, *| false }
-        allow(node).to receive(:class).and_return(Class.new { def self.name; "TestNode"; end })
+        allow(node).to receive_messages(respond_to?: false, class: Class.new { def self.name = "TestNode" })
 
         result = merger.send(:apply_node_typing, node)
         # Should return original node since NodeTyping.process won't wrap it
@@ -383,10 +382,9 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
       it "falls back to standard NodeTyping.process" do
         node = double("Node")
-        allow(node).to receive(:type).and_return(:paragraph)
+        allow(node).to receive_messages(type: :paragraph, class: Class.new { def self.name = "TestNode" })
         # Must handle all respond_to? calls including typed_node? check
         allow(node).to receive(:respond_to?) { |m, *| m == :type }
-        allow(node).to receive(:class).and_return(Class.new { def self.name; "TestNode"; end })
 
         result = merger.send(:apply_node_typing, node)
         # Should return original node since no match
@@ -402,9 +400,11 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
     def create_resolver_node(name, content: "content")
       node = double(name)
       allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-      allow(node).to receive(:type).and_return(:paragraph)
-      allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
-      allow(node).to receive(:to_commonmark).and_return(content)
+      allow(node).to receive_messages(
+        type: :paragraph,
+        source_position: {start_line: 1, end_line: 1},
+        to_commonmark: content,
+      )
       # Flexible respond_to? that handles all method checks
       allow(node).to receive(:respond_to?) { |m, *| [:type, :source_position, :to_commonmark].include?(m) }
       node
@@ -427,8 +427,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
       it "returns false for frozen nodes even if code_block type" do
         node = double("Node")
-        allow(node).to receive(:type).and_return(:code_block)
-        allow(node).to receive(:freeze_node?).and_return(true)
+        allow(node).to receive_messages(type: :code_block, freeze_node?: true)
         allow(node).to receive(:respond_to?) { |m, *| [:type, :freeze_node?].include?(m) }
         expect(merger.send(:code_block_node?, node)).to be(false)
       end
@@ -462,15 +461,14 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       it "falls back to to_commonmark when no source positions" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:source_position).and_return(nil)
-        allow(node).to receive(:to_commonmark).and_return("markdown output")
+        allow(node).to receive_messages(source_position: nil, to_commonmark: "markdown output")
 
         result = merger.send(:node_to_source, node, analysis)
         expect(result).to eq("markdown output")
       end
     end
 
-    describe "#process_template_only" do
+    describe "#process_template_only_to_builder" do
       let(:entry) do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
@@ -478,66 +476,81 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         {template_node: node}
       end
 
-      it "returns nil when add_template_only_nodes is false" do
+      it "does not add to builder when add_template_only_nodes is false" do
         merger = test_merger_class.new("# Test", "# Test", add_template_only_nodes: false)
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
-        result = merger.send(:process_template_only, entry, stats)
-        expect(result).to be_nil
+        builder = Markdown::Merge::OutputBuilder.new
+
+        merger.send(:process_template_only_to_builder, entry, builder, stats)
+
+        expect(builder.to_s).to be_empty
+        expect(stats[:nodes_added]).to eq(0)
       end
 
-      it "returns content when add_template_only_nodes is true" do
+      it "adds content to builder when add_template_only_nodes is true" do
         merger = test_merger_class.new("# Test", "# Test", add_template_only_nodes: true)
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
+        builder = Markdown::Merge::OutputBuilder.new
 
         # Need to set up the analysis mock properly
         allow(merger.template_analysis).to receive(:source_range).and_return("template content")
 
-        result = merger.send(:process_template_only, entry, stats)
-        expect(result).not_to be_nil
+        merger.send(:process_template_only_to_builder, entry, builder, stats)
+
+        expect(builder.to_s).to include("template content")
         expect(stats[:nodes_added]).to eq(1)
       end
     end
 
-    describe "#process_dest_only" do
-      it "returns content for regular nodes" do
+    describe "#process_dest_only_to_builder" do
+      it "adds content to builder for regular nodes" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
+        # respond_to? needs to handle both :freeze_node? and :source_position
+        allow(node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
+        allow(node).to receive(:freeze_node?).and_return(false)
         allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
 
         entry = {dest_node: node}
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
+        builder = Markdown::Merge::OutputBuilder.new
 
         allow(merger.dest_analysis).to receive(:source_range).and_return("dest content")
 
-        result = merger.send(:process_dest_only, entry, stats)
-        expect(result).to be_an(Array)
-        expect(result[0]).to eq("dest content")
-        expect(result[1]).to be_nil # No frozen info
+        frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+
+        expect(builder.to_s).to eq("dest content")
+        expect(frozen_info).to be_nil # No frozen info
       end
 
       it "includes frozen info for freeze nodes" do
         node = double("FreezeNode")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(true)
-        allow(node).to receive(:respond_to?).with(:freeze_node?).and_return(true)
-        allow(node).to receive(:freeze_node?).and_return(true)
-        allow(node).to receive(:start_line).and_return(5)
-        allow(node).to receive(:end_line).and_return(10)
-        allow(node).to receive(:reason).and_return("test reason")
-        allow(node).to receive(:full_text).and_return("frozen text")
+        # respond_to? needs to handle both :freeze_node? and :source_position
+        allow(node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
+        allow(node).to receive_messages(
+          freeze_node?: true,
+          start_line: 5,
+          end_line: 10,
+          reason: "test reason",
+          full_text: "frozen text",
+          source_position: {start_line: 5, end_line: 10},
+        )
 
         entry = {dest_node: node}
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
+        builder = Markdown::Merge::OutputBuilder.new
 
-        result = merger.send(:process_dest_only, entry, stats)
-        expect(result[1]).to be_a(Hash)
-        expect(result[1][:start_line]).to eq(5)
-        expect(result[1][:end_line]).to eq(10)
-        expect(result[1][:reason]).to eq("test reason")
+        frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+
+        expect(frozen_info).to be_a(Hash)
+        expect(frozen_info[:start_line]).to eq(5)
+        expect(frozen_info[:end_line]).to eq(10)
+        expect(frozen_info[:reason]).to eq("test reason")
       end
     end
 
-    describe "#process_match" do
+    describe "#process_match_to_builder" do
       let(:template_analysis) { merger.template_analysis }
       let(:dest_analysis) { merger.dest_analysis }
 
@@ -555,9 +568,12 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
           entry = {template_node: template_node, dest_node: dest_node, template_index: 0, dest_index: 0}
           stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
+          builder = Markdown::Merge::OutputBuilder.new
 
-          result = merger_template.send(:process_match, entry, stats)
-          expect(result).to be_an(Array)
+          frozen_info = merger_template.send(:process_match_to_builder, entry, builder, stats)
+
+          expect(builder.to_s).to include("template text")
+          expect(stats[:nodes_modified]).to eq(1)
         end
       end
 
@@ -567,13 +583,15 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
           dest_node = double("FrozenDestNode")
           allow(dest_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-          allow(dest_node).to receive(:freeze_node?).and_return(true)
-          allow(dest_node).to receive(:source_position).and_return({start_line: 5, end_line: 10})
-          allow(dest_node).to receive(:to_commonmark).and_return("frozen content")
-          allow(dest_node).to receive(:start_line).and_return(5)
-          allow(dest_node).to receive(:end_line).and_return(10)
-          allow(dest_node).to receive(:reason).and_return("frozen reason")
-          allow(dest_node).to receive(:type).and_return(:paragraph)
+          allow(dest_node).to receive_messages(
+            freeze_node?: true,
+            source_position: {start_line: 5, end_line: 10},
+            to_commonmark: "frozen content",
+            start_line: 5,
+            end_line: 10,
+            reason: "frozen reason",
+            type: :paragraph,
+          )
           # Flexible respond_to? that handles all method checks
           allow(dest_node).to receive(:respond_to?) { |m, *| [:freeze_node?, :type, :source_position, :to_commonmark, :start_line, :end_line, :reason].include?(m) }
 
@@ -589,14 +607,15 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
           entry = {template_node: template_node, dest_node: dest_node, template_index: 0, dest_index: 0}
           stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
+          builder = Markdown::Merge::OutputBuilder.new
 
-          result = merger.send(:process_match, entry, stats)
-          expect(result).to be_an(Array)
-          # frozen_info is the second element and should be populated
-          expect(result[1]).to be_a(Hash)
-          expect(result[1][:start_line]).to eq(5)
-          expect(result[1][:end_line]).to eq(10)
-          expect(result[1][:reason]).to eq("frozen reason")
+          frozen_info = merger.send(:process_match_to_builder, entry, builder, stats)
+
+          # frozen_info should be populated
+          expect(frozen_info).to be_a(Hash)
+          expect(frozen_info[:start_line]).to eq(5)
+          expect(frozen_info[:end_line]).to eq(10)
+          expect(frozen_info[:reason]).to eq("frozen reason")
         end
       end
     end
@@ -611,8 +630,10 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
         alignment = [{type: :match, template_node: template_node, dest_node: dest_node, template_index: 0, dest_index: 0}]
         result = merger.send(:process_alignment, alignment)
+
         expect(result).to be_an(Array)
-        expect(result.length).to eq(4) # [merged_parts, stats, frozen_blocks, conflicts]
+        expect(result.length).to eq(4) # [builder, stats, frozen_blocks, conflicts]
+        expect(result[0]).to be_a(Markdown::Merge::OutputBuilder)
       end
 
       it "processes :template_only entries when add_template_only_nodes is true" do
@@ -625,21 +646,29 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
         alignment = [{type: :template_only, template_node: template_node}]
         result = merger_add.send(:process_alignment, alignment)
-        expect(result[0]).to include("template content")
+
+        builder = result[0]
+        expect(builder).to be_a(Markdown::Merge::OutputBuilder)
+        expect(builder.to_s).to include("template content")
         expect(result[1][:nodes_added]).to eq(1)
       end
 
       it "processes :dest_only entries" do
         dest_node = double("DestNode")
         allow(dest_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(dest_node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
+        # respond_to? needs to handle both :freeze_node? and :source_position
+        allow(dest_node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
+        allow(dest_node).to receive(:freeze_node?).and_return(false)
         allow(dest_node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
 
         allow(merger.dest_analysis).to receive(:source_range).and_return("dest content")
 
         alignment = [{type: :dest_only, dest_node: dest_node}]
         result = merger.send(:process_alignment, alignment)
-        expect(result[0]).to include("dest content")
+
+        builder = result[0]
+        expect(builder).to be_a(Markdown::Merge::OutputBuilder)
+        expect(builder.to_s).to include("dest content")
       end
     end
   end
@@ -652,16 +681,14 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
     describe "#try_inner_merge_code_block" do
       let(:template_node) do
         node = double("TemplateCodeBlock")
-        allow(node).to receive(:fence_info).and_return("ruby")
-        allow(node).to receive(:string_content).and_return("puts 'template'")
+        allow(node).to receive_messages(fence_info: "ruby", string_content: "puts 'template'")
         allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
         node
       end
 
       let(:dest_node) do
         node = double("DestCodeBlock")
-        allow(node).to receive(:fence_info).and_return("ruby")
-        allow(node).to receive(:string_content).and_return("puts 'dest'")
+        allow(node).to receive_messages(fence_info: "ruby", string_content: "puts 'dest'")
         allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
         node
       end
@@ -761,8 +788,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       it "falls back to to_commonmark when start_line is nil" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:source_position).and_return({start_line: nil, end_line: 2})
-        allow(node).to receive(:to_commonmark).and_return("fallback markdown")
+        allow(node).to receive_messages(source_position: {start_line: nil, end_line: 2}, to_commonmark: "fallback markdown")
 
         result = merger.send(:node_to_source, node, analysis)
         expect(result).to eq("fallback markdown")
@@ -771,8 +797,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       it "falls back to to_commonmark when end_line is nil" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:source_position).and_return({start_line: 1, end_line: nil})
-        allow(node).to receive(:to_commonmark).and_return("fallback markdown")
+        allow(node).to receive_messages(source_position: {start_line: 1, end_line: nil}, to_commonmark: "fallback markdown")
 
         result = merger.send(:node_to_source, node, analysis)
         expect(result).to eq("fallback markdown")
@@ -894,15 +919,11 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
     it "returns nil when code_block_merger fails" do
       template_node = double("TemplateNode")
-      allow(template_node).to receive(:fence_info).and_return("ruby")
-      allow(template_node).to receive(:string_content).and_return("puts 'a'")
-      allow(template_node).to receive(:type).and_return(:code_block)
+      allow(template_node).to receive_messages(fence_info: "ruby", string_content: "puts 'a'", type: :code_block)
       allow(template_node).to receive(:respond_to?) { |m, *| [:fence_info, :type, :string_content].include?(m) }
 
       dest_node = double("DestNode")
-      allow(dest_node).to receive(:fence_info).and_return("ruby")
-      allow(dest_node).to receive(:string_content).and_return("invalid {{{{")
-      allow(dest_node).to receive(:type).and_return(:code_block)
+      allow(dest_node).to receive_messages(fence_info: "ruby", string_content: "invalid {{{{", type: :code_block)
       allow(dest_node).to receive(:respond_to?) { |m, *| [:fence_info, :type, :string_content].include?(m) }
 
       stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0, inner_merges: 0}
@@ -912,6 +933,228 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
       # Result should be nil (fallback) or an array
       expect(result).to be_nil.or(be_an(Array))
+    end
+
+    it "returns merged content when inner merge succeeds" do
+      template_node = double("TemplateNode")
+      allow(template_node).to receive_messages(fence_info: "ruby", string_content: "# template\nputs 'a'", type: :code_block)
+      allow(template_node).to receive(:respond_to?) { |m, *| [:fence_info, :type, :string_content].include?(m) }
+
+      dest_node = double("DestNode")
+      allow(dest_node).to receive_messages(fence_info: "ruby", string_content: "# dest\nputs 'b'", type: :code_block)
+      allow(dest_node).to receive(:respond_to?) { |m, *| [:fence_info, :type, :string_content].include?(m) }
+
+      stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0, inner_merges: 0}
+
+      result = merger_with_code_blocks.send(:try_inner_merge_code_block, template_node, dest_node, stats)
+
+      # Result can be nil or an array depending on if inner merge is available
+      if result
+        expect(result).to be_an(Array)
+        expect(result.first).to be_a(String)
+      end
+    end
+  end
+
+  describe "#process_match with inner merge" do
+    it "uses inner merge result when available for code blocks" do
+      merger = test_merger_class.new("# Test\n```ruby\ncode\n```", "# Test\n```ruby\ncode\n```", inner_merge_code_blocks: true)
+
+      # Find matching code blocks
+      template_node = merger.template_analysis.statements.find { |s| s.type == :code_block }
+      dest_node = merger.dest_analysis.statements.find { |s| s.type == :code_block }
+
+      if template_node && dest_node
+        stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0, inner_merges: 0}
+
+        entry = {
+          template_node: template_node,
+          dest_node: dest_node,
+          template_index: 0,
+          dest_index: 0,
+        }
+
+        content, _frozen = merger.send(:process_match, entry, stats)
+        expect(content).to be_a(String)
+      end
+    end
+  end
+
+  describe "#should_add_template_only_node?" do
+    it "returns false when add_template_only_nodes is false" do
+      merger = test_merger_class.new("# Test", "# Dest", add_template_only_nodes: false)
+      entry = {template_node: double("Node"), signature: [:test]}
+
+      result = merger.send(:should_add_template_only_node?, entry)
+      expect(result).to be false
+    end
+
+    it "returns false when add_template_only_nodes is nil" do
+      merger = test_merger_class.new("# Test", "# Dest", add_template_only_nodes: nil)
+      entry = {template_node: double("Node"), signature: [:test]}
+
+      result = merger.send(:should_add_template_only_node?, entry)
+      expect(result).to be false
+    end
+
+    it "returns true when add_template_only_nodes is true" do
+      merger = test_merger_class.new("# Test", "# Dest", add_template_only_nodes: true)
+      entry = {template_node: double("Node"), signature: [:test]}
+
+      result = merger.send(:should_add_template_only_node?, entry)
+      expect(result).to be true
+    end
+
+    it "calls the callable when add_template_only_nodes is a Proc" do
+      filter = ->(node, entry) { entry[:signature].first == :include_me }
+      merger = test_merger_class.new("# Test", "# Dest", add_template_only_nodes: filter)
+
+      include_entry = {template_node: double("Node"), signature: [:include_me]}
+      exclude_entry = {template_node: double("Node"), signature: [:exclude_me]}
+
+      expect(merger.send(:should_add_template_only_node?, include_entry)).to be true
+      expect(merger.send(:should_add_template_only_node?, exclude_entry)).to be false
+    end
+
+    it "returns true for truthy non-callable values" do
+      merger = test_merger_class.new("# Test", "# Dest", add_template_only_nodes: "truthy_string")
+      entry = {template_node: double("Node"), signature: [:test]}
+
+      result = merger.send(:should_add_template_only_node?, entry)
+      expect(result).to be true
+    end
+  end
+
+  describe "#process_template_only_to_builder" do
+    it "does not add to builder when should_add_template_only_node? is false" do
+      merger = test_merger_class.new("# Template", "# Dest", add_template_only_nodes: false)
+      stats = {nodes_added: 0}
+      builder = Markdown::Merge::OutputBuilder.new
+
+      node = double("Node")
+      allow(node).to receive_messages(source_position: {start_line: 1, end_line: 1}, to_commonmark: "# Template")
+
+      entry = {template_node: node, signature: [:test]}
+
+      merger.send(:process_template_only_to_builder, entry, builder, stats)
+
+      expect(builder.to_s).to be_empty
+      expect(stats[:nodes_added]).to eq(0)
+    end
+
+    it "adds content to builder when should_add_template_only_node? is true" do
+      merger = test_merger_class.new("# Template", "# Dest", add_template_only_nodes: true)
+      stats = {nodes_added: 0}
+      builder = Markdown::Merge::OutputBuilder.new
+
+      node = double("Node")
+      allow(node).to receive_messages(source_position: {start_line: 1, end_line: 1}, to_commonmark: "# Template")
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(node).and_return(node)
+
+      entry = {template_node: node, signature: [:test]}
+
+      merger.send(:process_template_only_to_builder, entry, builder, stats)
+
+      expect(builder.to_s).not_to be_empty
+      expect(stats[:nodes_added]).to eq(1)
+    end
+  end
+
+  describe "#process_dest_only_to_builder" do
+    it "handles freeze nodes" do
+      merger = test_merger_class.new("# Template", "# Dest")
+      stats = {nodes_removed: 0}
+      builder = Markdown::Merge::OutputBuilder.new
+
+      freeze_node = double("FreezeNode")
+      # respond_to? needs to handle both :freeze_node? and :source_position
+      allow(freeze_node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
+      # is_a? needs to return true for FreezeNodeBase
+      allow(freeze_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(true)
+      # Mock === on FreezeNodeBase class so case/when works
+      allow(Ast::Merge::FreezeNodeBase).to receive(:===).with(freeze_node).and_return(true)
+      allow(freeze_node).to receive_messages(
+        freeze_node?: true,
+        start_line: 2,
+        end_line: 5,
+        reason: "keep this section",
+        source_position: {start_line: 2, end_line: 5},
+        to_commonmark: "frozen content",
+        full_text: "frozen content",
+      )
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(freeze_node).and_return(freeze_node)
+
+      entry = {dest_node: freeze_node, signature: [:freeze_block]}
+
+      frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+
+      expect(builder.to_s).not_to be_empty
+      expect(frozen_info).to be_a(Hash)
+      expect(frozen_info[:start_line]).to eq(2)
+      expect(frozen_info[:end_line]).to eq(5)
+      expect(frozen_info[:reason]).to eq("keep this section")
+    end
+
+    it "handles regular nodes" do
+      merger = test_merger_class.new("# Template", "# Dest")
+      stats = {nodes_removed: 0}
+      builder = Markdown::Merge::OutputBuilder.new
+
+      node = double("Node")
+      # respond_to? needs to handle both :freeze_node? and :source_position
+      allow(node).to receive(:respond_to?) { |method| [:freeze_node?, :source_position].include?(method) }
+      allow(node).to receive_messages(
+        freeze_node?: false,
+        source_position: {start_line: 1, end_line: 1},
+        to_commonmark: "# Dest",
+      )
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(node).and_return(node)
+
+      entry = {dest_node: node, signature: [:paragraph]}
+
+      frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+
+      expect(builder.to_s).not_to be_empty
+      expect(frozen_info).to be_nil
+    end
+  end
+
+  describe "#process_match_to_builder" do
+    it "handles matched nodes with template preference" do
+      merger = test_merger_class.new("# Template", "# Dest", preference: :template)
+      stats = {nodes_modified: 0}
+      builder = Markdown::Merge::OutputBuilder.new
+
+      template_node = double("TemplateNode")
+      allow(template_node).to receive_messages(
+        source_position: {start_line: 1, end_line: 1},
+        to_commonmark: "# Template",
+        type: :heading,
+      )
+      allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(template_node).and_return(false)
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(template_node).and_return(template_node)
+
+      dest_node = double("DestNode")
+      allow(dest_node).to receive_messages(
+        source_position: {start_line: 1, end_line: 1},
+        to_commonmark: "# Dest",
+        type: :heading,
+      )
+      allow(dest_node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
+      allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(dest_node).and_return(false)
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(dest_node).and_return(dest_node)
+
+      entry = {
+        template_node: template_node,
+        dest_node: dest_node,
+        template_index: 0,
+        dest_index: 0,
+      }
+
+      frozen_info = merger.send(:process_match_to_builder, entry, builder, stats)
+
+      expect(builder.to_s).not_to be_empty
+      expect(stats[:nodes_modified]).to eq(1)
     end
   end
 end

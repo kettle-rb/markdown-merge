@@ -4,15 +4,13 @@ RSpec.describe Markdown::Merge::FileAligner do
   # Create mock analysis objects for testing
   let(:mock_template_analysis) do
     analysis = double("TemplateAnalysis")
-    allow(analysis).to receive(:statements).and_return([])
-    allow(analysis).to receive(:signature_at).and_return(nil)
+    allow(analysis).to receive_messages(statements: [], signature_at: nil)
     analysis
   end
 
   let(:mock_dest_analysis) do
     analysis = double("DestAnalysis")
-    allow(analysis).to receive(:statements).and_return([])
-    allow(analysis).to receive(:signature_at).and_return(nil)
+    allow(analysis).to receive_messages(statements: [], signature_at: nil)
     analysis
   end
 
@@ -119,7 +117,7 @@ RSpec.describe Markdown::Merge::FileAligner do
       end
     end
 
-    context "sorting" do
+    context "with sorting" do
       let(:template_nodes) { [double("T1"), double("T2")] }
       let(:dest_nodes) { [double("D1"), double("D2"), double("D3")] }
 
@@ -243,7 +241,7 @@ RSpec.describe Markdown::Merge::FileAligner do
       end
     end
 
-    context "interleaved matching" do
+    context "with interleaved matching" do
       let(:template_nodes) { [double("T1"), double("T2"), double("T3")] }
       let(:dest_nodes) { [double("D1"), double("D2")] }
 
@@ -278,12 +276,12 @@ RSpec.describe Markdown::Merge::FileAligner do
   end
 
   describe "#build_signature_map (private)" do
-    let(:node1) { double("Node1") }
-    let(:node2) { double("Node2") }
+    let(:first_node) { double("Node1") }
+    let(:second_node) { double("Node2") }
 
     let(:multi_node_analysis) do
       analysis = double("Analysis")
-      allow(analysis).to receive(:statements).and_return([node1, node2])
+      allow(analysis).to receive(:statements).and_return([first_node, second_node])
       allow(analysis).to receive(:signature_at).with(0).and_return([:heading, 1, "First"])
       allow(analysis).to receive(:signature_at).with(1).and_return([:paragraph, "second"])
       analysis

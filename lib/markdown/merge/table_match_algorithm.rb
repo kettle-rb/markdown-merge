@@ -291,7 +291,11 @@ module Markdown
           child = node.first_child
           while child
             collect_text_recursive(child, text_parts)
-            child = child.respond_to?(:next_sibling) ? child.next_sibling : (child.respond_to?(:next) ? child.next : nil)
+            child = if child.respond_to?(:next_sibling)
+              child.next_sibling
+            else
+              (child.respond_to?(:next) ? child.next : nil)
+            end
           end
         end
       end

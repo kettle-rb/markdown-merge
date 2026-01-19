@@ -8,6 +8,12 @@
 
 # AST parsing for advanced templating
 if ENV.fetch("KETTLE_RB_DEV", "false").casecmp?("true")
+  # Markdown backends for markdown-merge
+  platform :mri do
+    gem "markly-merge", path: "../../../markly-merge"           # markly backend
+    gem "commonmarker-merge", path: "../../../commonmarker-merge" # commonmarker backend
+  end
+
   # Inner-merge dependencies for CodeBlockMerger
   # These are loaded on-demand when merging fenced code blocks
   gem "bash-merge", path: "../../../bash-merge"         # dotenv code blocks
@@ -15,7 +21,6 @@ if ENV.fetch("KETTLE_RB_DEV", "false").casecmp?("true")
   gem "json-merge", path: "../../../json-merge"         # JSON code blocks
   gem "jsonc-merge", path: "../../../jsonc-merge"       # JSONC code blocks
   # gem "markdown-merge", path: "../../../markdown-merge" # generic markdown tools
-  # gem "markly-merge", path: "../../../markly-merge"     # markly markdown merging
   gem "prism-merge", path: "../../../prism-merge"       # Ruby code blocks
   gem "psych-merge", path: "../../../psych-merge"       # YAML code blocks
   gem "rbs-merge", path: "../../../rbs-merge"           # RBS code blocks
@@ -27,9 +32,12 @@ else
   # gem "json-merge"      # JSON code blocks
   # gem "jsonc-merge"     # JSONC code blocks
   # # gem "markdown-merge"  # generic markdown tools
-  # # gem "markly-merge"    # markly markdown merging
   # gem "prism-merge"     # Ruby code blocks
   # gem "psych-merge"     # YAML code blocks
   # gem "rbs-merge"       # RBS code blocks
   # gem "toml-merge"      # TOML code blocks
+  #
+  # # platform :mri do
+  # #   gem "markly-merge"    # markly markdown merging
+  # # end
 end

@@ -114,7 +114,7 @@ module Markdown
       def initialize(
         template_content,
         dest_content,
-        backend: Backends::AUTO,
+        backend: :auto,
         signature_generator: nil,
         preference: :destination,
         add_template_only_nodes: false,
@@ -124,7 +124,6 @@ module Markdown
         node_typing: nil,
         **parser_options
       )
-        Backends.validate!(backend)
         @requested_backend = backend
         @parser_options = parser_options
 
@@ -178,7 +177,8 @@ module Markdown
 
       # Convert a node to its source text.
       #
-      # Handles wrapped nodes from NodeTypeNormalizer.
+      # Handles wrapped nodes from NodeTypeNormalizer, gap line nodes,
+      # and link definition nodes created during gap detection.
       #
       # @param node [Object] Node to convert (may be wrapped)
       # @param analysis [FileAnalysis] Analysis for source lookup
@@ -187,6 +187,11 @@ module Markdown
         # Check for any FreezeNode type (base class or subclass)
         if node.is_a?(Ast::Merge::FreezeNodeBase)
           return node.full_text
+        end
+
+        # Handle gap line nodes (created for blank lines and link definitions)
+        if node.is_a?(LinkDefinitionNode) || node.is_a?(GapLineNode)
+          return node.content
         end
 
         # Unwrap if needed to access source_position
@@ -199,9 +204,18 @@ module Markdown
         # Fall back to to_commonmark if no position info
         return raw_node.to_commonmark unless start_line && end_line
 
-        analysis.source_range(start_line, end_line)
+        # Get source from line range
+        source = analysis.source_range(start_line, end_line)
+
+        # Handle Markly's buggy position reporting for :html nodes
+        # where end_line < start_line results in empty source_range.
+        # Fall back to to_commonmark in that case.
+        if source.empty? && raw_node.respond_to?(:to_commonmark)
+          raw_node.to_commonmark.chomp
+        else
+          source
+        end
       end
     end
   end
 end
-

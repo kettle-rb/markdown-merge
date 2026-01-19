@@ -84,7 +84,8 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
 
     it "returns lines in range" do
       result = multiline_analysis.source_range(2, 4)
-      expect(result).to eq("Line 2\nLine 3\nLine 4")
+      # Lines include trailing newlines for proper formatting
+      expect(result).to eq("Line 2\nLine 3\nLine 4\n")
     end
 
     it "returns empty string for invalid start" do
@@ -99,7 +100,8 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
 
     it "handles single line" do
       result = multiline_analysis.source_range(3, 3)
-      expect(result).to eq("Line 3")
+      # Single line includes trailing newline
+      expect(result).to eq("Line 3\n")
     end
   end
 
@@ -237,8 +239,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       it "returns code_block signature" do
         node = double("CodeBlockNode", type: :code_block)
         allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
-        allow(node).to receive(:fence_info).and_return("ruby")
-        allow(node).to receive(:string_content).and_return("puts 'hello'")
+        allow(node).to receive_messages(fence_info: "ruby", string_content: "puts 'hello'")
 
         result = analysis.send(:compute_parser_signature, node)
         expect(result[0]).to eq(:code_block)
@@ -250,8 +251,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       it "handles nil fence_info" do
         node = double("CodeBlockNode", type: :code_block)
         allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
-        allow(node).to receive(:fence_info).and_return(nil)
-        allow(node).to receive(:string_content).and_return("plain code")
+        allow(node).to receive_messages(fence_info: nil, string_content: "plain code")
 
         result = analysis.send(:compute_parser_signature, node)
         expect(result[0]).to eq(:code_block)
@@ -263,8 +263,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       it "returns list signature with type and count" do
         node = double("ListNode", type: :list)
         allow(node).to receive(:respond_to?).with(:list_type).and_return(true)
-        allow(node).to receive(:list_type).and_return(:bullet)
-        allow(node).to receive(:first_child).and_return(nil)
+        allow(node).to receive_messages(list_type: :bullet, first_child: nil)
 
         result = analysis.send(:compute_parser_signature, node)
         expect(result[0]).to eq(:list)
@@ -430,6 +429,8 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
     it "returns true for parser nodes (with :type method)" do
       parser_node = double("ParserNode")
       allow(parser_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
+      allow(parser_node).to receive(:is_a?).with(Markdown::Merge::LinkDefinitionNode).and_return(false)
+      allow(parser_node).to receive(:is_a?).with(Markdown::Merge::GapLineNode).and_return(false)
       allow(parser_node).to receive(:respond_to?) { |m, *| [:type].include?(m) }
 
       expect(analysis.fallthrough_node?(parser_node)).to be(true)
@@ -587,35 +588,58 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
           nodes = []
 
           # Title node (line 1)
-          title = Struct.new(:type, :source_position, :first_child, :header_level).new(
+          title = Struct.new(:type, :source_position, :first_child, :header_level, :string_content).new(
             :heading,
             {start_line: 1, end_line: 1},
             nil,
             1,
+            nil,
           )
           nodes << title
 
-          # Frozen section header (lines 4-5, inside freeze block)
-          frozen_header = Struct.new(:type, :source_position, :first_child, :header_level).new(
+          # Freeze marker HTML node (line 3)
+          freeze_marker = Struct.new(:type, :source_position, :first_child, :string_content).new(
+            :html,
+            {start_line: 3, end_line: 3},
+            nil,
+            "<!-- markdown-merge:freeze -->\n",
+          )
+          nodes << freeze_marker
+
+          # Frozen section header (lines 4, inside freeze block)
+          frozen_header = Struct.new(:type, :source_position, :first_child, :header_level, :string_content).new(
             :heading,
-            {start_line: 4, end_line: 5},
+            {start_line: 4, end_line: 4},
             nil,
             2,
+            nil,
           )
           nodes << frozen_header
 
+          # Unfreeze marker HTML node (line 6)
+          unfreeze_marker = Struct.new(:type, :source_position, :first_child, :string_content).new(
+            :html,
+            {start_line: 6, end_line: 6},
+            nil,
+            "<!-- markdown-merge:unfreeze -->\n",
+          )
+          nodes << unfreeze_marker
+
           # Regular section header (line 8)
-          regular_header = Struct.new(:type, :source_position, :first_child, :header_level).new(
+          regular_header = Struct.new(:type, :source_position, :first_child, :header_level, :string_content).new(
             :heading,
             {start_line: 8, end_line: 8},
             nil,
             2,
+            nil,
           )
           nodes << regular_header
 
           # Link nodes together
-          title.define_singleton_method(:next_sibling) { frozen_header }
-          frozen_header.define_singleton_method(:next_sibling) { regular_header }
+          title.define_singleton_method(:next_sibling) { freeze_marker }
+          freeze_marker.define_singleton_method(:next_sibling) { frozen_header }
+          frozen_header.define_singleton_method(:next_sibling) { unfreeze_marker }
+          unfreeze_marker.define_singleton_method(:next_sibling) { regular_header }
           regular_header.define_singleton_method(:next_sibling) { nil }
 
           doc.first_child = title
@@ -652,11 +676,36 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
     let(:test_class_for_freeze) do
       Class.new(described_class) do
         def parse_document(source)
-          @mock_doc ||= Struct.new(:first_child, :type).new(nil, :document)
+          @lines = source.split("\n")
+          doc = Struct.new(:first_child, :type).new(nil, :document)
+
+          # Create HTML nodes for any freeze markers found in source
+          nodes = []
+          @lines.each_with_index do |line, idx|
+            line_num = idx + 1
+            if line.include?("<!-- markdown-merge:freeze") || line.include?("<!-- markdown-merge:unfreeze")
+              html_node = Struct.new(:type, :source_position, :first_child, :string_content).new(
+                :html,
+                {start_line: line_num, end_line: line_num},
+                nil,
+                "#{line}\n",
+              )
+              nodes << html_node
+            end
+          end
+
+          # Link nodes together
+          nodes.each_with_index do |node, i|
+            next_node = nodes[i + 1]
+            node.define_singleton_method(:next_sibling) { next_node }
+          end
+
+          doc.first_child = nodes.first
+          doc
         end
 
         def next_sibling(node)
-          nil
+          node.respond_to?(:next_sibling) ? node.next_sibling : nil
         end
       end
     end
@@ -815,6 +864,198 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
       # Force re-extraction
       statements = analysis.statements
       expect(statements).to be_an(Array)
+    end
+  end
+
+  describe "#compute_node_signature" do
+    let(:test_class_sig) do
+      Class.new(described_class) do
+        def parse_document(source)
+          Struct.new(:first_child, :type).new(nil, :document)
+        end
+
+        def next_sibling(node)
+          nil
+        end
+
+        def compute_parser_signature(node)
+          [:parser_signature, node.type]
+        end
+      end
+    end
+
+    it "handles LinkDefinitionNode instances" do
+      analysis = test_class_sig.new("# Test")
+
+      link_node = Markdown::Merge::LinkDefinitionNode.new(
+        "[ref]: https://example.com",
+        line_number: 5,
+        label: "ref",
+        url: "https://example.com",
+      )
+
+      signature = analysis.compute_node_signature(link_node)
+      expect(signature).to eq([:link_definition, "ref"])
+    end
+
+    it "handles GapLineNode instances" do
+      analysis = test_class_sig.new("# Test")
+
+      gap_node = Markdown::Merge::GapLineNode.new("", line_number: 3)
+
+      signature = analysis.compute_node_signature(gap_node)
+      expect(signature).to eq([:gap_line, 3, ""])
+    end
+
+    it "delegates to compute_parser_signature for other nodes" do
+      analysis = test_class_sig.new("# Test")
+
+      parser_node = Struct.new(:type).new(:paragraph)
+
+      signature = analysis.compute_node_signature(parser_node)
+      expect(signature).to eq([:parser_signature, :paragraph])
+    end
+  end
+
+  describe "#fallthrough_node?" do
+    let(:test_class_fallthrough) do
+      Class.new(described_class) do
+        def parse_document(source)
+          Struct.new(:first_child, :type).new(nil, :document)
+        end
+
+        def next_sibling(node)
+          nil
+        end
+
+        def compute_parser_signature(node)
+          [:test]
+        end
+      end
+    end
+
+    it "returns true for LinkDefinitionNode" do
+      analysis = test_class_fallthrough.new("# Test")
+
+      link_node = Markdown::Merge::LinkDefinitionNode.new(
+        "[ref]: https://example.com",
+        line_number: 1,
+        label: "ref",
+        url: "https://example.com",
+      )
+
+      expect(analysis.fallthrough_node?(link_node)).to be true
+    end
+
+    it "returns true for GapLineNode" do
+      analysis = test_class_fallthrough.new("# Test")
+
+      gap_node = Markdown::Merge::GapLineNode.new("", line_number: 1)
+
+      expect(analysis.fallthrough_node?(gap_node)).to be true
+    end
+
+    it "returns false for other objects" do
+      analysis = test_class_fallthrough.new("# Test")
+
+      expect(analysis.fallthrough_node?("string")).to be false
+      expect(analysis.fallthrough_node?(123)).to be false
+      expect(analysis.fallthrough_node?(nil)).to be false
+    end
+  end
+
+  describe "#collect_top_level_nodes_with_gaps (private)" do
+    let(:test_class_gaps) do
+      Class.new(described_class) do
+        attr_accessor :mock_parser_nodes
+
+        def parse_document(source)
+          @lines = source.split("\n")
+          Struct.new(:first_child, :type).new(nil, :document)
+        end
+
+        def next_sibling(node)
+          nil
+        end
+
+        def collect_top_level_nodes
+          @mock_parser_nodes || []
+        end
+
+        def compute_parser_signature(node)
+          [:test]
+        end
+      end
+    end
+
+    it "creates GapLineNode for blank lines" do
+      source = "# Title\n\n## Section"
+      analysis = test_class_gaps.new(source)
+
+      # Mock parser nodes covering lines 1 and 3
+      node1 = Struct.new(:type, :source_position).new(:heading, {start_line: 1, end_line: 1})
+      node2 = Struct.new(:type, :source_position).new(:heading, {start_line: 3, end_line: 3})
+      analysis.mock_parser_nodes = [node1, node2]
+
+      result = analysis.send(:collect_top_level_nodes_with_gaps)
+
+      gap_nodes = result.select { |n| n.is_a?(Markdown::Merge::GapLineNode) }
+      expect(gap_nodes.length).to eq(1)
+      expect(gap_nodes.first.line_number).to eq(2)
+    end
+
+    it "creates LinkDefinitionNode for link definitions in gaps" do
+      source = "# Title\n[ref]: https://example.com\n## Section"
+      analysis = test_class_gaps.new(source)
+
+      # Mock parser nodes covering lines 1 and 3
+      node1 = Struct.new(:type, :source_position).new(:heading, {start_line: 1, end_line: 1})
+      node2 = Struct.new(:type, :source_position).new(:heading, {start_line: 3, end_line: 3})
+      analysis.mock_parser_nodes = [node1, node2]
+
+      result = analysis.send(:collect_top_level_nodes_with_gaps)
+
+      link_nodes = result.select { |n| n.is_a?(Markdown::Merge::LinkDefinitionNode) }
+      expect(link_nodes.length).to eq(1)
+      expect(link_nodes.first.label).to eq("ref")
+    end
+
+    it "handles nodes with nil source_position" do
+      source = "# Title\n\n## Section"
+      analysis = test_class_gaps.new(source)
+
+      # Node with nil source_position
+      node1 = Struct.new(:type, :source_position).new(:heading, nil)
+      analysis.mock_parser_nodes = [node1]
+
+      result = analysis.send(:collect_top_level_nodes_with_gaps)
+      expect(result).to be_an(Array)
+    end
+
+    it "handles Markly buggy position reporting (end_line < start_line)" do
+      source = "# Title\n\n## Section\n\n### Sub"
+      analysis = test_class_gaps.new(source)
+
+      # Simulate Markly bug: end_line < start_line
+      node1 = Struct.new(:type, :source_position).new(:heading, {start_line: 3, end_line: 2})
+      analysis.mock_parser_nodes = [node1]
+
+      # Should not raise, should handle gracefully
+      result = analysis.send(:collect_top_level_nodes_with_gaps)
+      expect(result).to be_an(Array)
+    end
+
+    it "returns parser nodes as-is when source has no lines" do
+      analysis = test_class_gaps.new("")
+
+      node = Struct.new(:type, :source_position).new(:paragraph, {start_line: 1, end_line: 1})
+      analysis.mock_parser_nodes = [node]
+
+      # Force empty lines
+      analysis.instance_variable_set(:@lines, [])
+
+      result = analysis.send(:collect_top_level_nodes_with_gaps)
+      expect(result).to eq([node])
     end
   end
 end

@@ -29,6 +29,7 @@ gemfile do
   gem "ast-merge", path: File.expand_path("../../..", __dir__)
   gem "tree_haver", path: File.expand_path("../../tree_haver", __dir__)
   gem "markdown-merge", path: File.expand_path("..", __dir__)
+  gem "commonmarker-merge", path: File.expand_path("../../commonmarker-merge", __dir__)
 
   # Language-specific merge gems
   gem "prism-merge", path: File.expand_path("../../prism-merge", __dir__)
@@ -39,8 +40,8 @@ gemfile do
 end
 
 require "tree_haver"
-require "markdown/merge"
-require "commonmarker"
+require "markdown-merge"
+require "commonmarker-merge"
 
 puts "=" * 80
 puts "Markdown Code Block Inner-Merge Example"
@@ -193,7 +194,7 @@ puts "✓ Backend: #{TreeHaver.backend_module}"
 puts
 
 # Check availability
-if TreeHaver::Backends::Commonmarker.available?
+if Commonmarker::Merge::Backend.available?
   puts "✓ Commonmarker is available"
 else
   puts "✗ Commonmarker not found - cannot run example"
@@ -213,7 +214,7 @@ merger_no_inner = Markdown::Merge::SmartMerger.new(
   backend: :commonmarker,
   inner_merge_code_blocks: false,
   preference: :destination,
-  add_template_only_nodes: true
+  add_template_only_nodes: true,
 )
 
 result_no_inner = merger_no_inner.merge_result
@@ -242,7 +243,7 @@ merger_with_inner = Markdown::Merge::SmartMerger.new(
   backend: :commonmarker,
   inner_merge_code_blocks: true,  # Enable inner-merge!
   preference: :destination,
-  add_template_only_nodes: true
+  add_template_only_nodes: true,
 )
 
 result_with_inner = merger_with_inner.merge_result
@@ -340,4 +341,3 @@ puts "  → When working with parsed markdown AST: use native nodes"
 puts "  → When working with raw text: use FencedCodeBlockDetector"
 puts "  → markdown-merge uses the former approach ✓"
 puts "=" * 80
-

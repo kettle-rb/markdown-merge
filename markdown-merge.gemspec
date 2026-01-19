@@ -82,10 +82,12 @@ Gem::Specification.new do |spec|
   spec.executables = []
 
   # Shared merge infrastructure
-  spec.add_dependency("ast-merge", "~> 1.0")                            # ruby >= 3.2.0
+  spec.add_dependency("ast-merge", "~> 4.0", ">= 4.0.2")                # ruby >= 3.2.0
 
   # Unified markdown parsing via tree_haver backends (Commonmarker, Markly)
-  spec.add_dependency("tree_haver", "~> 3.0")                           # ruby >= 3.2.0
+  spec.add_dependency("tree_haver", "~> 5.0", ">= 5.0.2")               # ruby >= 3.2.0
+
+  spec.add_dependency("parslet", "~> 2.0")                              # ruby >= 0
 
   # Utilities
   spec.add_dependency("version_gem", "~> 1.1", ">= 1.1.9")              # ruby >= 2.2.0

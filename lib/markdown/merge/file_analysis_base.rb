@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "set"
 
 module Markdown
   module Merge
@@ -44,6 +45,9 @@ module Markdown
       # @return [Object] The root document node
       attr_reader :document
 
+      # @return [Array] Parse errors if any
+      attr_reader :errors
+
       # Note: :source is inherited from Ast::Merge::FileAnalyzable
 
       # Initialize file analysis
@@ -53,10 +57,16 @@ module Markdown
       # @param signature_generator [Proc, nil] Custom signature generator
       def initialize(source, freeze_token: DEFAULT_FREEZE_TOKEN, signature_generator: nil, **parser_options)
         @source = source
+        # Split by newlines, keeping trailing empty strings (-1)
+        # But remove the final empty string if source ends with newline
+        # (that empty string represents the "line after the last newline" which doesn't exist)
         @lines = source.split("\n", -1)
+        @lines.pop if @lines.last == "" && source.end_with?("\n")
+
         @freeze_token = freeze_token
         @signature_generator = signature_generator
         @parser_options = parser_options
+        @errors = []
 
         # Parse the Markdown source - subclasses implement this
         @document = DebugLogger.time("FileAnalysisBase#parse") do
@@ -97,7 +107,7 @@ module Markdown
       # Check if parse was successful
       # @return [Boolean]
       def valid?
-        !@document.nil?
+        @errors.empty? && !@document.nil?
       end
 
       # Get all statements (block nodes outside freeze blocks + FreezeNode instances)
@@ -111,6 +121,10 @@ module Markdown
         case node
         when Ast::Merge::FreezeNodeBase
           node.signature
+        when LinkDefinitionNode
+          node.signature
+        when GapLineNode
+          node.signature
         else
           compute_parser_signature(node)
         end
@@ -120,7 +134,11 @@ module Markdown
       # @param value [Object] The value to check
       # @return [Boolean] true if this is a fallthrough node
       def fallthrough_node?(value)
-        value.is_a?(Ast::Merge::FreezeNodeBase) || parser_node?(value) || super
+        value.is_a?(Ast::Merge::FreezeNodeBase) ||
+          value.is_a?(LinkDefinitionNode) ||
+          value.is_a?(GapLineNode) ||
+          parser_node?(value) ||
+          super
       end
 
       # Check if value is a parser-specific node.
@@ -212,13 +230,33 @@ module Markdown
       end
 
       # Get the source text for a range of lines
+      #
+      # Lines are joined with newlines, and each line gets a trailing newline
+      # except for the last line of the file (which may or may not have one in the original).
+      #
       # @param start_line [Integer] Start line (1-indexed)
       # @param end_line [Integer] End line (1-indexed)
       # @return [String] Source text
       def source_range(start_line, end_line)
         return "" if start_line < 1 || end_line < start_line
 
-        @lines[(start_line - 1)..(end_line - 1)].join("\n")
+        extracted_lines = @lines[(start_line - 1)..(end_line - 1)]
+        return "" if extracted_lines.empty?
+
+        # Add newlines between and after lines, but not after the last line of the file
+        # unless it originally had one
+        result = extracted_lines.join("\n")
+
+        # Add trailing newline if this isn't the last line of the file
+        # (the last line may or may not have a trailing newline in the original source)
+        if end_line < @lines.length
+          result += "\n"
+        elsif @source&.end_with?("\n")
+          # Last line of file, but original source ends with newline
+          result += "\n"
+        end
+
+        result
       end
 
       protected
@@ -253,14 +291,18 @@ module Markdown
       # @return [Array<Object>] Integrated list of nodes and freeze blocks
       def extract_and_integrate_all_nodes
         freeze_markers = find_freeze_markers
-        return collect_top_level_nodes if freeze_markers.empty?
+
+        # Use gap-aware collection to preserve link definitions and gap lines
+        base_nodes = collect_top_level_nodes_with_gaps
+
+        return base_nodes if freeze_markers.empty?
 
         # Build freeze blocks from markers
         freeze_blocks = build_freeze_blocks(freeze_markers)
-        return collect_top_level_nodes if freeze_blocks.empty?
+        return base_nodes if freeze_blocks.empty?
 
         # Integrate nodes with freeze blocks
-        integrate_nodes_with_freeze_blocks(freeze_blocks)
+        integrate_nodes_with_freeze_blocks(freeze_blocks, base_nodes)
       end
 
       # Collect top-level nodes from document
@@ -275,25 +317,170 @@ module Markdown
         nodes
       end
 
-      # Find freeze markers in source
+      # Collect top-level nodes with gap line detection.
+      #
+      # Markdown parsers consume certain content (like link reference definitions)
+      # during parsing. This method detects "gap" lines that aren't covered by any
+      # node and creates synthetic nodes for them.
+      #
+      # @return [Array<Object>] Nodes including gap line nodes
+      def collect_top_level_nodes_with_gaps
+        parser_nodes = collect_top_level_nodes
+        return parser_nodes if @lines.empty?
+
+        # Track which lines are covered by parser nodes
+        covered_lines = Set.new
+        parser_nodes.each do |node|
+          pos = node.source_position
+          next unless pos
+
+          start_line = pos[:start_line]
+          end_line = pos[:end_line]
+
+          # Handle Markly's buggy position reporting for :html nodes
+          # where end_line can be less than start_line (e.g., "lines 3-2")
+          if end_line < start_line
+            # Just mark the start_line as covered
+            covered_lines << start_line
+          else
+            (start_line..end_line).each { |l| covered_lines << l }
+          end
+        end
+
+        # Find gap lines (lines not covered by any node)
+        total_lines = @lines.size
+        gap_line_numbers = (1..total_lines).to_a - covered_lines.to_a
+
+        # Create nodes for gap lines
+        gap_nodes = create_gap_nodes(gap_line_numbers)
+
+        # Integrate gap nodes with parser nodes in line order
+        integrate_gap_nodes(parser_nodes, gap_nodes)
+      end
+
+      # Create nodes for gap lines.
+      #
+      # Link reference definitions get LinkDefinitionNode, others get GapLineNode.
+      # Every gap line gets a node so we can reconstruct the document exactly.
+      #
+      # @param line_numbers [Array<Integer>] Gap line numbers (1-based)
+      # @return [Array<Object>] Gap nodes
+      def create_gap_nodes(line_numbers)
+        line_numbers.map do |line_num|
+          content = @lines[line_num - 1] || ""
+
+          # Try to parse as link definition first
+          link_node = LinkDefinitionNode.parse(content, line_number: line_num)
+          if link_node
+            link_node
+          else
+            GapLineNode.new(content, line_number: line_num)
+          end
+        end
+      end
+
+      # Integrate gap nodes with parser nodes in line order.
+      # Sets preceding_node for gap lines to enable context-aware signatures.
+      #
+      # @param parser_nodes [Array<Object>] Parser-generated nodes
+      # @param gap_nodes [Array<Object>] Gap line nodes
+      # @return [Array<Object>] All nodes in line order
+      def integrate_gap_nodes(parser_nodes, gap_nodes)
+        all_nodes = parser_nodes + gap_nodes
+
+        # Sort by start line
+        sorted_nodes = all_nodes.sort_by do |node|
+          pos = node.source_position
+          pos ? pos[:start_line] : 0
+        end
+
+        # Set preceding_node for gap lines based on their position in the sorted list
+        # This allows gap lines to have context-aware signatures
+        sorted_nodes.each_with_index do |node, idx|
+          if node.is_a?(GapLineNode) && idx > 0
+            # Find the previous non-gap-line node (structural node)
+            preceding = sorted_nodes[0...idx].reverse.find { |n| !n.is_a?(GapLineNode) }
+            node.preceding_node = preceding
+          end
+        end
+
+        sorted_nodes
+      end
+
+      # Find freeze markers from parsed HTML nodes.
+      #
+      # Freeze markers are HTML comments that Markly parses as :html nodes.
+      # By analyzing the parsed nodes (not raw source lines), we automatically ignore
+      # freeze markers that appear inside code blocks (they're part of the code block's
+      # string content, not separate nodes).
+      #
+      # Note: We only support freeze markers as standalone HTML comment nodes.
+      # Freeze markers embedded inside other HTML tags (e.g., `<div><!-- freeze -->text</div>`)
+      # are not detected because they're part of a larger HTML node's content.
+      #
       # @return [Array<Hash>] Marker information
       def find_freeze_markers
         markers = []
         pattern = Ast::Merge::FreezeNodeBase.pattern_for(:html_comment, @freeze_token)
 
-        @lines.each_with_index do |line, index|
-          match = line.match(pattern)
-          next unless match
+        return markers unless @document
 
-          marker_type = match[1] # "freeze" or "unfreeze"
-          reason = match[2]      # optional reason
+        # Walk through top-level nodes looking for HTML nodes with freeze markers
+        child = @document.first_child
+        while child
+          node_type = child.type
 
-          markers << {
-            line: index + 1,
-            type: marker_type.to_sym,
-            text: line,
-            reason: reason,
-          }
+          # Check HTML nodes for freeze markers
+          # Handle both raw Markly (:html) and TreeHaver normalized ("html_block", :html_block) types
+          if node_type == :html || node_type == :html_block || node_type == "html_block" || node_type == "html"
+            # Try multiple content extraction methods:
+            # 1. string_content (raw Markly/Commonmarker)
+            # 2. to_commonmark on wrapper
+            # 3. inner_node.to_commonmark (TreeHaver Commonmarker wrapper)
+            content = nil
+
+            if child.respond_to?(:string_content)
+              begin
+                content = child.string_content.to_s
+              rescue TypeError
+                # Some nodes don't have string_content
+                content = nil
+              end
+            end
+
+            if content.nil? || content.empty?
+              if child.respond_to?(:to_commonmark)
+                content = child.to_commonmark.to_s
+              end
+            end
+
+            # TreeHaver Commonmarker wrapper stores content in inner_node
+            if (content.nil? || content.empty?) && child.respond_to?(:inner_node)
+              inner = child.inner_node
+              if inner.respond_to?(:to_commonmark)
+                content = inner.to_commonmark.to_s
+              end
+            end
+
+            content ||= ""
+            match = content.match(pattern)
+
+            if match
+              pos = child.source_position
+              marker_type = match[1] # "freeze" or "unfreeze"
+              reason = match[2]      # optional reason
+
+              markers << {
+                line: pos ? pos[:start_line] : 0,
+                type: marker_type.to_sym,
+                text: content.strip,
+                reason: reason,
+                node: child, # Keep reference to the actual node
+              }
+            end
+          end
+
+          child = next_sibling(child)
         end
 
         DebugLogger.debug("Found freeze markers", {count: markers.size})
@@ -401,13 +588,14 @@ module Markdown
 
       # Integrate nodes with freeze blocks
       # @param freeze_blocks [Array<FreezeNode>] Freeze blocks
+      # @param base_nodes [Array<Object>, nil] Base nodes (defaults to collect_top_level_nodes_with_gaps)
       # @return [Array<Object>] Integrated list
-      def integrate_nodes_with_freeze_blocks(freeze_blocks)
+      def integrate_nodes_with_freeze_blocks(freeze_blocks, base_nodes = nil)
         result = []
         freeze_index = 0
         current_freeze = freeze_blocks[freeze_index]
 
-        top_level_nodes = collect_top_level_nodes
+        top_level_nodes = base_nodes || collect_top_level_nodes_with_gaps
 
         top_level_nodes.each do |node|
           node_start = node.source_position&.dig(:start_line) || 0

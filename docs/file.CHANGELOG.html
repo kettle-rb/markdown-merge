@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>
+  File: CHANGELOG
+  
+    &mdash; Documentation by YARD 0.9.38
+  
+</title>
+
+  <link rel="stylesheet" href="css/style.css" type="text/css" />
+
+  <link rel="stylesheet" href="css/common.css" type="text/css" />
+
+<script type="text/javascript">
+  pathId = "CHANGELOG";
+  relpath = '';
+</script>
+
+
+  <script type="text/javascript" charset="utf-8" src="js/jquery.js"></script>
+
+  <script type="text/javascript" charset="utf-8" src="js/app.js"></script>
+
+
+  </head>
+  <body>
+    <div class="nav_wrap">
+      <iframe id="nav" src="file_list.html?1"></iframe>
+      <div id="resizer"></div>
+    </div>
+
+    <div id="main" tabindex="-1">
+      <div id="header">
+        <div id="menu">
+  
+    <a href="_index.html">Index</a> &raquo; 
+    <span class="title">File: CHANGELOG</span>
+  
+</div>
+
+        <div id="search">
+  
+    <a class="full_list_link" id="class_list_link"
+        href="class_list.html">
+
+        <svg width="24" height="24">
+          <rect x="0" y="4" width="24" height="4" rx="1" ry="1"></rect>
+          <rect x="0" y="12" width="24" height="4" rx="1" ry="1"></rect>
+          <rect x="0" y="20" width="24" height="4" rx="1" ry="1"></rect>
+        </svg>
+    </a>
+  
+</div>
+        <div class="clear"></div>
+      </div>
+
+      <div id="content"><div id='filecontents'><h1 id="changelog">Changelog</h1>
+
+<p><a href="https://semver.org/spec/v2.0.0.html"><img src="https://img.shields.io/badge/semver-2.0.0-FFDD67.svg?style=flat" alt="SemVer 2.0.0"></a> <a href="https://keepachangelog.com/en/1.0.0/"><img src="https://img.shields.io/badge/keep--a--changelog-1.0.0-FFDD67.svg?style=flat" alt="Keep-A-Changelog 1.0.0"></a></p>
+
+<p>All notable changes to this project will be documented in this file.</p>
+
+<p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,<br>
+and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>,<br>
+and <a href="https://tom.preston-werner.com/2022/05/23/major-version-numbers-are-not-sacred.html">yes</a>, platform and engine support are part of the <a href="https://github.com/semver/semver/issues/716#issuecomment-869336139">public API</a>.<br>
+Please file a bug if you notice a violation of semantic versioning.</p>
+
+<h2 id="unreleased"><a href="https://github.com/kettle-rb/markdown-merge/compare/v1.0.0...HEAD">Unreleased</a></h2>
+
+<h3 id="added">Added</h3>
+
+<ul>
+  <li>
+<strong>Cleanse Module</strong>: New namespace for document cleansing/repair utilities
+    <ul>
+      <li>
+<code>Cleanse::CondensedLinkRefs</code> - Fixes condensed link reference definitions caused by previous merge bugs
+        <ul>
+          <li>Parslet-based PEG parser for detecting and expanding <code>[label]: url[label2]: url2</code> → separate lines</li>
+          <li>Methods: <code>#condensed?</code>, <code>#expand</code>, <code>#definitions</code>, <code>#count</code>
+</li>
+        </ul>
+      </li>
+      <li>
+<code>Cleanse::CodeFenceSpacing</code> - Fixes malformed code fence language tags
+        <ul>
+          <li>Fixes ` <code>console` → `</code>console` (removes space between backticks and language)</li>
+          <li>Parslet-based parser for detecting code blocks and their info strings</li>
+          <li>Methods: <code>#malformed?</code>, <code>#malformed_count</code>, <code>#code_blocks</code>, <code>#fix</code>
+</li>
+        </ul>
+      </li>
+      <li>
+<code>Cleanse::BlockSpacing</code> - Fixes missing blank lines between block elements
+        <ul>
+          <li>Detects and fixes missing blank lines after thematic breaks (<code>---</code>)</li>
+          <li>Detects and fixes missing blank lines between list items and headings</li>
+          <li>Detects and fixes missing blank lines between markdown and HTML blocks</li>
+          <li>Detects and fixes missing blank lines before HTML when preceded by markdown</li>
+          <li>Special handling for markdown container closing tags (e.g., <code>&lt;/details&gt;</code>) - adds blank lines before them even when inside HTML blocks, since their content may be markdown</li>
+          <li>Methods: <code>#malformed?</code>, <code>#issue_count</code>, <code>#issues</code>, <code>#fix</code>
+</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkParser tree-based nesting detection</strong>:
+    <ul>
+      <li>
+<code>#find_all_link_constructs(content)</code> - Returns tree structure with <code>:children</code> for nested items</li>
+      <li>
+<code>#build_link_tree(links, images)</code> - Detects containment and builds parent-child relationships</li>
+      <li>
+<code>#flatten_leaf_first(items)</code> - Flattens tree in post-order (children before parents) for safe replacement</li>
+      <li>Properly handles linked images like <code>[![alt](img-url)](link-url)</code> as parent link with child image</li>
+    </ul>
+  </li>
+  <li>
+<strong><code>bin/fix_readme_formatting</code></strong>: Updated to include <code>BlockSpacing</code> cleanse fix
+    <ul>
+      <li>Now fixes missing blank lines between block elements (thematic breaks, lists, headings, HTML)</li>
+      <li>Runs as Phase 1c after CondensedLinkRefs and CodeFenceSpacing</li>
+    </ul>
+  </li>
+  <li>
+<strong>MergeGemRegistry Integration</strong>: Registers with <code>Ast::Merge::RSpec::MergeGemRegistry</code>
+    <ul>
+      <li>Enables automatic RSpec dependency tag support</li>
+      <li>Registers as category <code>:markdown</code> with <code>skip_instantiation: true</code> (requires backend)</li>
+    </ul>
+  </li>
+  <li>
+<strong>TestableNode-based spec helpers</strong>: New helper methods using <code>TreeHaver::RSpec::TestableNode</code><br>
+for creating real node instances in tests instead of fragile mocks
+    <ul>
+      <li>
+<code>create_test_node(type, text:, start_line:, ...)</code> - Create any node type</li>
+      <li>
+<code>create_test_table_node(rows:, text:)</code> - Create table nodes</li>
+      <li>
+<code>create_test_row_node(cells:, start_line:)</code> - Create table row nodes</li>
+      <li>
+<code>create_test_cell_node(content:, start_line:)</code> - Create table cell nodes</li>
+      <li>
+<code>create_test_paragraph_node(content:, start_line:)</code> - Create paragraph nodes</li>
+      <li>
+<code>create_test_heading_node(level:, content:, start_line:)</code> - Create heading nodes</li>
+      <li>
+<code>create_test_code_block_node(content:, language:, start_line:)</code> - Create code block nodes</li>
+      <li>
+<code>create_test_list_node(items:, ordered:, start_line:)</code> - Create list nodes</li>
+      <li>
+<code>create_test_block_quote_node(content:, start_line:)</code> - Create block quote nodes</li>
+      <li>
+<code>create_test_thematic_break_node(start_line:)</code> - Create thematic break nodes</li>
+      <li>
+<code>create_test_html_block_node(content:, start_line:)</code> - Create HTML block nodes</li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkParser</strong>: New Parslet-based PEG parser for markdown link structures
+    <ul>
+      <li>Properly handles emoji in labels (e.g., <code>[🖼️galtzo-discord]</code>)</li>
+      <li>Handles multi-byte UTF-8 characters without regex limitations</li>
+      <li>Handles nested brackets (for linked images like <code>[![alt][ref]](url)</code>)</li>
+      <li>Parses link reference definitions: <code>[label]: url</code> and <code>[label]: url "title"</code>
+</li>
+      <li>Parses inline links: <code>[text](url)</code> and <code>[text](url "title")</code>
+</li>
+      <li>Parses inline images: <code>![alt](url)</code> and <code>![alt](url "title")</code>
+</li>
+      <li>Methods: <code>#parse_definitions</code>, <code>#parse_definition_line</code>, <code>#find_inline_links</code>, <code>#find_inline_images</code>, <code>#build_url_to_label_map</code>
+</li>
+    </ul>
+  </li>
+  <li>
+<strong>DocumentProblems</strong>: New class for tracking document issues found during merge
+    <ul>
+      <li>Categories: <code>:duplicate_link_definition</code>, <code>:excessive_whitespace</code>, <code>:link_has_title</code>, <code>:image_has_title</code>, <code>:link_ref_spacing</code>
+</li>
+      <li>Severity levels: <code>:info</code>, <code>:warning</code>, <code>:error</code>
+</li>
+      <li>Methods: <code>#add</code>, <code>#by_category</code>, <code>#by_severity</code>, <code>#warnings</code>, <code>#errors</code>, <code>#infos</code>, <code>#merge!</code>, <code>#summary_by_category</code>, <code>#summary_by_severity</code>
+</li>
+      <li>Accessible via <code>MergeResult#problems</code> after merge</li>
+    </ul>
+  </li>
+  <li>
+<strong>WhitespaceNormalizer</strong>: New class for normalizing excessive whitespace
+    <ul>
+      <li>Supports multiple normalization modes:
+        <ul>
+          <li>
+<code>:basic</code> (or <code>true</code>) - Collapse excessive blank lines (3+ → 2)</li>
+          <li>
+<code>:link_refs</code> - Basic + remove blank lines between consecutive link reference definitions</li>
+          <li>
+<code>:strict</code> - All normalizations (same as :link_refs currently)</li>
+        </ul>
+      </li>
+      <li>Class method: <code>WhitespaceNormalizer.normalize(content, mode: :basic)</code>
+</li>
+      <li>Instance usage tracks problems for introspection</li>
+      <li>New <code>:link_ref_spacing</code> problem category for tracking removed blank lines between link refs</li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkReferenceRehydrator</strong>: New class for converting inline links to reference style
+    <ul>
+      <li>Converts inline links <code>[text](url)</code> to <code>[text][label]</code> when matching definition exists</li>
+      <li>Converts inline images <code>![alt](url)</code> to <code>![alt][label]</code> when matching definition exists</li>
+      <li>Skips links/images with titles (would lose title information)</li>
+      <li>Tracks duplicate definitions and title conflicts in problems</li>
+      <li>Prefers shortest label when multiple labels point to same URL</li>
+    </ul>
+  </li>
+  <li>
+<strong>SmartMergerBase options</strong>:
+    <ul>
+      <li>
+<code>normalize_whitespace: false | true | :basic | :link_refs | :strict</code> - whitespace normalization mode</li>
+      <li>
+<code>rehydrate_link_references: false</code> - convert inline links to reference style</li>
+    </ul>
+  </li>
+  <li>
+<strong>PartialTemplateMerger options</strong>:
+    <ul>
+      <li>
+<code>normalize_whitespace: false | true | :basic | :link_refs | :strict</code> - whitespace normalization mode</li>
+      <li>
+<code>rehydrate_link_references: false</code> - convert inline links to reference style</li>
+    </ul>
+  </li>
+  <li>
+<strong>MergeResult#problems</strong>: Access <code>DocumentProblems</code> instance for introspection</li>
+  <li>
+<strong>OutputBuilder</strong>: New class for building markdown output from merge operations
+    <ul>
+      <li>Consolidates all output assembly logic in one place</li>
+      <li>Handles node source extraction, link definition reconstruction, gap lines</li>
+      <li>Replaces manual string concatenation with clean builder pattern</li>
+      <li>Public methods: <code>add_node_source</code>, <code>add_link_definition</code>, <code>add_gap_line</code>, <code>add_raw</code>, <code>to_s</code>, <code>empty?</code>, <code>clear</code>
+</li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkDefinitionFormatter</strong>: New module for formatting link reference definitions
+    <ul>
+      <li>Reconstructs link definitions that parsers consume during parsing</li>
+      <li>Methods: <code>format(node)</code>, <code>format_all(nodes)</code>
+</li>
+    </ul>
+  </li>
+  <li>
+<strong>Position-based signature generator for PartialTemplateMerger</strong>:
+    <ul>
+      <li>Tables (and other elements) at the same relative position in their sections now match</li>
+      <li>Fixes the “duplicate tables” bug where tables with different column structures weren’t merged</li>
+      <li>Template table replaces destination table when both are at the same position within the section</li>
+      <li>Position counters reset for each document, ensuring template and destination tables match</li>
+    </ul>
+  </li>
+  <li>
+<strong>PartialTemplateMerger</strong>: Markdown-specific implementation for partial template merging
+    <ul>
+      <li>Extends <code>Ast::Merge::PartialTemplateMergerBase</code> with markdown-specific logic</li>
+      <li>Heading-level-aware section boundaries (finds next heading of same or higher level)</li>
+      <li>Source-based text extraction via <code>analysis.source_range</code> to preserve:
+        <ul>
+          <li>Link reference definitions (no conversion to inline links)</li>
+          <li>Table column padding/alignment</li>
+          <li>Original formatting exactly as written</li>
+        </ul>
+      </li>
+      <li>Supports both Markly and Commonmarker backends via tree_haver</li>
+    </ul>
+  </li>
+  <li>
+<strong>SmartMergerBase</strong>: <code>add_template_only_nodes</code> now accepts a callable filter
+    <ul>
+      <li>Boolean <code>true</code>/<code>false</code> still works as before (add all or none)</li>
+      <li>Callable (Proc/Lambda) receives <code>(node, entry)</code> and returns truthy to add the node</li>
+      <li>Enables selective addition of template-only nodes based on signature, type, or content</li>
+      <li>Useful for partial template merging where only specific template nodes should be added</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="changed">Changed</h3>
+
+<ul>
+  <li>
+<strong>WhitespaceNormalizer refactored to use LinkParser</strong>
+    <ul>
+      <li>Removed <code>LINK_REF_PATTERN</code> regex constant</li>
+      <li>Now uses <code>LinkParser#parse_definition_line</code> for link definition detection</li>
+      <li>Supports all link definition formats that LinkParser handles:
+        <ul>
+          <li>Angle-bracketed URLs: <code>[label]: &lt;url&gt;</code>
+</li>
+          <li>Emoji in labels: <code>[🎨logo]: url</code>
+</li>
+          <li>Definitions with titles in any quote style</li>
+        </ul>
+      </li>
+      <li>Completely regex-free implementation</li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkDefinitionNode</strong>: Now uses <code>LinkParser</code> (Parslet-based) instead of regex for parsing
+    <ul>
+      <li>Properly handles emoji in labels (e.g., <code>[🖼️galtzo-discord]</code>)</li>
+      <li>More robust parsing of multi-byte UTF-8 characters</li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkReferenceRehydrator</strong>: Rewritten to use <code>LinkParser</code> (Parslet-based) for all parsing
+    <ul>
+      <li>Uses <code>LinkParser#parse_definitions</code> to parse link reference definitions</li>
+      <li>Uses <code>LinkParser#find_inline_links</code> and <code>#find_inline_images</code> to find inline constructs</li>
+      <li>Properly handles linked images (e.g., <code>[![alt][ref]](url)</code>)</li>
+      <li>Properly handles emoji in link text and URLs</li>
+      <li>No regex used - all parsing via PEG grammar</li>
+    </ul>
+  </li>
+  <li>
+<strong>PartialTemplateMerger#find_section_end</strong>: For headings, now always uses heading-level-aware logic, ignoring tree-depth-based boundary from <code>InjectionPointFinder</code>
+    <ul>
+      <li>Fixes duplicate H4 section bug where nested headings (e.g., H4 inside H3) were incorrectly treated as section boundaries</li>
+      <li>In Markdown, all headings are siblings at the same tree depth regardless of level (H2, H3, H4), so tree depth cannot determine section boundaries</li>
+      <li>Heading level semantics require comparing actual heading level numbers (H3 &lt; H4 means H4 is nested)</li>
+    </ul>
+  </li>
+  <li>
+<strong>SmartMergerBase</strong>: Refactored to use OutputBuilder throughout
+    <ul>
+      <li>
+<code>process_alignment</code> now returns OutputBuilder instead of array</li>
+      <li>New methods: <code>process_match_to_builder</code>, <code>process_template_only_to_builder</code>, <code>process_dest_only_to_builder</code>
+</li>
+      <li>Old methods deprecated but kept for compatibility</li>
+      <li>Inner merge for code blocks now uses <code>try_inner_merge_code_block_to_builder</code>
+</li>
+    </ul>
+  </li>
+  <li>
+<strong>OutputBuilder</strong>: Enhanced node extraction to handle <code>source_position</code> method
+    <ul>
+      <li>Supports nodes with <code>source_position</code> hash</li>
+      <li>Falls back to <code>to_commonmark</code> if position unavailable</li>
+      <li>Handles FreezeNode, LinkDefinitionNode, GapLineNode, and parser nodes</li>
+    </ul>
+  </li>
+  <li>
+<strong>FileAnalysisBase</strong>: Added <code>@errors</code> instance variable and <code>errors</code> attr_reader
+    <ul>
+      <li>
+<code>valid?</code> now checks both <code>@errors.empty?</code> and <code>!@document.nil?</code>
+</li>
+      <li>Consistent with bash-merge, json-merge, jsonc-merge, and toml-merge patterns</li>
+    </ul>
+  </li>
+  <li>
+<strong>FileAnalysis error handling</strong>: Now rescues <code>TreeHaver::Error</code> in <code>parse_document</code>
+    <ul>
+      <li>
+<code>TreeHaver::Error</code> inherits from <code>Exception</code>, not <code>StandardError</code>
+</li>
+      <li>
+<code>TreeHaver::NotAvailable</code> is a subclass of <code>TreeHaver::Error</code>, so it’s also caught</li>
+      <li>Stores error in <code>@errors</code> and returns nil, so <code>valid?</code> returns false</li>
+      <li>
+<code>SmartMergerBase#parse_and_analyze</code> then raises the appropriate parse error</li>
+    </ul>
+  </li>
+  <li>
+<strong>Dependency tags</strong>: Refactored to use shared <code>TreeHaver::RSpec::DependencyTags</code> from tree_haver gem
+    <ul>
+      <li>All dependency detection is now centralized in tree_haver</li>
+      <li>Use <code>require "tree_haver/rspec"</code> for shared RSpec configuration</li>
+      <li>
+<code>MarkdownMergeDependencies</code> is now an alias to <code>TreeHaver::RSpec::DependencyTags</code>
+</li>
+      <li>Enables <code>MARKDOWN_MERGE_DEBUG=1</code> for dependency summary output</li>
+      <li>Inner-merge dependencies (<code>:toml_merge</code>, <code>:json_merge</code>, <code>:prism_merge</code>, <code>:psych_merge</code>) now available</li>
+    </ul>
+  </li>
+  <li>
+<strong>CodeBlockMerger</strong>: Refactored class methods to remove redundant error handling
+    <ul>
+      <li>Removed duplicate <code>rescue</code> blocks from <code>merge_with_prism</code>, <code>merge_with_psych</code>, <code>merge_with_json</code>, <code>merge_with_toml</code>
+</li>
+      <li>Error handling is now consolidated in <code>merge_code_blocks</code> instance method</li>
+      <li>Class methods now raise exceptions which are caught by <code>merge_code_blocks</code>
+</li>
+      <li>Updated specs to test through <code>merge_code_blocks</code> (the intended API) instead of class methods directly</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="deprecated">Deprecated</h3>
+
+<h3 id="removed">Removed</h3>
+
+<h3 id="fixed">Fixed</h3>
+
+<ul>
+  <li>
+<strong>CondensedLinkRefs false positive</strong>: Fixed bug where reference-style links followed by colon<br>
+(e.g., <code>**[Floss-Funding.dev][🖇floss-funding.dev]:**</code>) were incorrectly detected as condensed<br>
+link reference definitions
+    <ul>
+      <li>The pattern <code>][label]:</code> was matching, but this is a reference link with punctuation, not a link def</li>
+      <li>Now requires URL-like content after <code>]:</code> to confirm it’s a real link def</li>
+      <li>Supports both full URLs (<code>https://...</code>) and relative paths (<code>CONTRIBUTING.md</code>, <code>LICENSE.txt</code>)</li>
+      <li>The relative path pattern matches <code>UPPERCASE.ext</code> format common in repo files</li>
+      <li>Prevents incorrect newline insertion inside markdown links</li>
+    </ul>
+  </li>
+  <li>
+<strong>LinkReferenceRehydrator content corruption</strong>: Fixed critical bug where rehydrating linked images<br>
+like <code>[![alt](img-url)](link-url)</code> would corrupt document content
+    <ul>
+      <li>The parser was finding both the outer link and inner image as separate items</li>
+      <li>Replacing both overlapping items corrupted the content, losing significant portions of documents</li>
+      <li>Now uses tree-based approach: builds parent-child relationships for nested constructs</li>
+      <li>Processes replacements recursively: children are processed first, then parent text is updated<br>
+to include child replacements before parent is processed</li>
+      <li>Single pass now handles all nested structures (no more multi-pass workaround needed)</li>
+      <li>Test fixture showed 68 lines lost (1023 → 955) before fix, now preserves all content</li>
+    </ul>
+  </li>
+  <li>
+<strong>OutputBuilder</strong>: Fixed link definitions being concatenated without newlines
+    <ul>
+      <li>
+<code>extract_source</code> for <code>LinkDefinitionNode</code> now includes trailing newline</li>
+      <li>Link definitions are now properly output on separate lines</li>
+    </ul>
+  </li>
+  <li>
+<strong>OutputBuilder</strong>: Fixed auto-spacing to properly handle link_definition transitions
+    <ul>
+      <li>Removed <code>link_definition</code> from the skip list for auto-spacing</li>
+      <li>Now correctly adds blank lines when transitioning FROM link_definition TO other content (e.g., headings)</li>
+      <li>
+<code>MarkdownStructure.needs_blank_between?</code> now handles contiguous types properly</li>
+    </ul>
+  </li>
+  <li>
+<strong>MarkdownStructure</strong>: Added support for contiguous node types
+    <ul>
+      <li>New <code>CONTIGUOUS_TYPES</code> constant for node types that should not have blank lines between consecutive instances</li>
+      <li>
+<code>link_definition</code> is now a contiguous type - consecutive link definitions won’t have blank lines inserted</li>
+      <li>Added <code>link_definition</code> to <code>NEEDS_BLANK_AFTER</code> - link definition blocks get blank line after when followed by other content</li>
+      <li>New <code>contiguous_type?</code> method to check if a type is contiguous</li>
+      <li>
+<code>needs_blank_between?</code> now returns <code>false</code> for consecutive nodes of the same contiguous type</li>
+    </ul>
+  </li>
+  <li>
+<strong>PartialTemplateMerger#node_to_text</strong>: Fixed double blank line bug
+    <ul>
+      <li>
+<code>source_range</code> already adds trailing newlines, so adding another <code>"\n"</code> caused double blank lines</li>
+      <li>Removed the extra <code>+ "\n"</code> that was causing excessive blank lines in merged output</li>
+    </ul>
+  </li>
+  <li>
+<strong>Lint cleanup</strong>: Fixed RSpec/ReceiveMessages cops by combining multiple <code>receive</code> stubs</li>
+  <li>
+<strong>Style fixes</strong>: Fixed Style/ClassMethodsDefinitions in <code>LinkDefinitionNode</code> using <code>class &lt;&lt; self</code>
+</li>
+  <li>
+<strong>Layout fixes</strong>: Removed extra blank lines in <code>mock_helpers.rb</code>
+</li>
+  <li>
+<strong>Freeze block detection</strong>: Fixed <code>find_freeze_markers</code> to handle both raw parser types<br>
+(<code>:html</code>) and TreeHaver normalized types (<code>"html_block"</code>, <code>:html_block</code>). Previously,<br>
+freeze markers were not detected when using TreeHaver backends because the node type<br>
+check only looked for <code>:html</code>.</li>
+  <li>
+<strong>Freeze marker content extraction</strong>: Now uses a three-tier fallback for extracting<br>
+HTML comment content:
+    <ol>
+      <li>
+<code>string_content</code> (raw Markly/Commonmarker nodes)</li>
+      <li>
+<code>to_commonmark</code> on the wrapper node</li>
+      <li>
+<code>inner_node.to_commonmark</code> (TreeHaver Commonmarker wrapper)<br>
+This fixes freeze block detection for Commonmarker where the TreeHaver wrapper’s<br>
+content methods return empty but the inner node has the actual content.</li>
+    </ol>
+  </li>
+</ul>
+
+<h3 id="security">Security</h3>
+
+</div></div>
+
+      <div id="footer">
+  Generated on Mon Jan 19 02:23:37 2026 by
+  <a href="https://yardoc.org" title="Yay! A Ruby Documentation Tool" target="_parent">yard</a>
+  0.9.38 (ruby-4.0.1).
+</div>
+
+    </div>
+  </body>
+</html>

@@ -54,7 +54,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     MARKDOWN
   end
 
-  describe "#initialize", :markdown_backend do
+  describe "#initialize", :markdown_parsing do
     it "creates merger with auto backend" do
       merger = described_class.new(template_content, dest_content)
       expect(merger).to be_a(described_class)
@@ -97,7 +97,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "#merge", :markdown_backend do
+  describe "#merge", :markdown_parsing do
     it "returns merged content as string" do
       merger = described_class.new(template_content, dest_content)
       result = merger.merge
@@ -120,7 +120,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "#merge_result", :markdown_backend do
+  describe "#merge_result", :markdown_parsing do
     it "returns MergeResult object" do
       merger = described_class.new(template_content, dest_content)
       result = merger.merge_result
@@ -143,7 +143,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "preference: :template", :markdown_backend do
+  describe "preference: :template", :markdown_parsing do
     # Preference determines which source to use when nodes MATCH.
     # - preference: :destination (default) - use destination's version of matched nodes
     # - preference: :template - use template's version of matched nodes
@@ -323,7 +323,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "add_template_only_nodes: true", :markdown_backend do
+  describe "add_template_only_nodes: true", :markdown_parsing do
     it "adds nodes that only exist in template" do
       merger = described_class.new(template_content, dest_content, add_template_only_nodes: true)
       result = merger.merge
@@ -332,7 +332,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "freeze blocks", :markdown_backend do
+  describe "freeze blocks", :markdown_parsing do
     let(:template_with_changed_freeze) do
       <<~MARKDOWN
         # Title
@@ -355,7 +355,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "#create_file_analysis", :markdown_backend do
+  describe "#create_file_analysis", :markdown_parsing do
     it "creates FileAnalysis instances" do
       merger = described_class.new(template_content, dest_content)
       analysis = merger.send(:create_file_analysis, template_content, freeze_token: "test-token")
@@ -365,15 +365,18 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
     it "passes backend option" do
       merger = described_class.new(template_content, dest_content)
-      analysis = merger.send(:create_file_analysis, template_content,
+      analysis = merger.send(
+        :create_file_analysis,
+        template_content,
         backend: merger.backend,
-        freeze_token: "test-token")
+        freeze_token: "test-token",
+      )
 
       expect(analysis.backend).to eq(merger.backend)
     end
   end
 
-  describe "#node_to_source", :markdown_backend do
+  describe "#node_to_source", :markdown_parsing do
     it "extracts source text from nodes" do
       merger = described_class.new(template_content, dest_content)
       analysis = merger.template_analysis
@@ -397,21 +400,242 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "#template_parse_error_class", :markdown_backend do
+  describe "#template_parse_error_class", :markdown_parsing do
     it "returns Markdown::Merge::TemplateParseError" do
       merger = described_class.new(template_content, dest_content)
       expect(merger.send(:template_parse_error_class)).to eq(Markdown::Merge::TemplateParseError)
     end
   end
 
-  describe "#destination_parse_error_class", :markdown_backend do
+  describe "#destination_parse_error_class", :markdown_parsing do
     it "returns Markdown::Merge::DestinationParseError" do
       merger = described_class.new(template_content, dest_content)
       expect(merger.send(:destination_parse_error_class)).to eq(Markdown::Merge::DestinationParseError)
     end
   end
 
-  describe "backend consistency", :commonmarker, :markly do
+  describe "#node_to_source", :markdown_parsing do
+    it "handles LinkDefinitionNode" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+
+      link_node = Markdown::Merge::LinkDefinitionNode.new(
+        "[ref]: https://example.com",
+        line_number: 1,
+        label: "ref",
+        url: "https://example.com",
+      )
+
+      source = merger.send(:node_to_source, link_node, analysis)
+      expect(source).to eq("[ref]: https://example.com")
+    end
+
+    it "handles GapLineNode" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+
+      gap_node = Markdown::Merge::GapLineNode.new("", line_number: 5)
+
+      source = merger.send(:node_to_source, gap_node, analysis)
+      expect(source).to eq("")
+    end
+
+    it "handles GapLineNode with content" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+
+      gap_node = Markdown::Merge::GapLineNode.new("some gap content", line_number: 5)
+
+      source = merger.send(:node_to_source, gap_node, analysis)
+      expect(source).to eq("some gap content")
+    end
+  end
+
+  describe "#create_file_analysis", :markdown_parsing do
+    it "creates FileAnalysis with provided options" do
+      merger = described_class.new(template_content, dest_content)
+
+      analysis = merger.send(
+        :create_file_analysis,
+        template_content,
+        freeze_token: "custom-token",
+        signature_generator: nil,
+      )
+
+      expect(analysis).to be_a(Markdown::Merge::FileAnalysis)
+    end
+
+    it "uses requested backend" do
+      merger = described_class.new(template_content, dest_content)
+
+      analysis = merger.send(
+        :create_file_analysis,
+        template_content,
+        backend: merger.backend,
+        freeze_token: "markdown-merge",
+        signature_generator: nil,
+      )
+
+      expect(analysis.backend).to eq(merger.backend)
+    end
+  end
+
+  describe "#node_to_source edge cases", :markdown_parsing do
+    it "falls back to to_commonmark when source_position is nil" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+
+      mock_node = double("Node")
+      allow(mock_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
+      allow(mock_node).to receive(:is_a?).with(Markdown::Merge::LinkDefinitionNode).and_return(false)
+      allow(mock_node).to receive(:is_a?).with(Markdown::Merge::GapLineNode).and_return(false)
+      allow(mock_node).to receive_messages(source_position: nil, to_commonmark: "fallback content\n")
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(mock_node).and_return(mock_node)
+
+      source = merger.send(:node_to_source, mock_node, analysis)
+      expect(source).to eq("fallback content\n")
+    end
+
+    it "falls back to to_commonmark when source_range is empty" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+
+      mock_node = double("Node")
+      allow(mock_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
+      allow(mock_node).to receive(:is_a?).with(Markdown::Merge::LinkDefinitionNode).and_return(false)
+      allow(mock_node).to receive(:is_a?).with(Markdown::Merge::GapLineNode).and_return(false)
+      # Simulate Markly bug where end_line < start_line
+      allow(mock_node).to receive_messages(
+        source_position: {start_line: 5, end_line: 3},
+        to_commonmark: "recovered content\n",
+      )
+      allow(mock_node).to receive(:respond_to?).with(:to_commonmark).and_return(true)
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(mock_node).and_return(mock_node)
+
+      source = merger.send(:node_to_source, mock_node, analysis)
+      expect(source).to eq("recovered content")
+    end
+
+    it "returns empty string when source_range empty and to_commonmark not available" do
+      merger = described_class.new(template_content, dest_content)
+      analysis = merger.template_analysis
+
+      mock_node = double("Node")
+      allow(mock_node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
+      allow(mock_node).to receive(:is_a?).with(Markdown::Merge::LinkDefinitionNode).and_return(false)
+      allow(mock_node).to receive(:is_a?).with(Markdown::Merge::GapLineNode).and_return(false)
+      allow(mock_node).to receive(:source_position).and_return({start_line: 5, end_line: 3})
+      allow(mock_node).to receive(:respond_to?).with(:to_commonmark).and_return(false)
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(mock_node).and_return(mock_node)
+
+      source = merger.send(:node_to_source, mock_node, analysis)
+      expect(source).to eq("")
+    end
+  end
+
+  describe "initialization with all options", :markdown_parsing do
+    it "accepts all configuration options" do
+      custom_sig = ->(node) { [:custom, node.object_id] }
+
+      merger = described_class.new(
+        template_content,
+        dest_content,
+        signature_generator: custom_sig,
+        preference: :template,
+        add_template_only_nodes: true,
+        inner_merge_code_blocks: true,
+        freeze_token: "custom-freeze",
+        match_refiner: nil,
+        node_typing: nil,
+      )
+
+      expect(merger).to be_a(described_class)
+      expect(merger.backend).to be_a(Symbol)
+    end
+
+    it "passes parser_options to FileAnalysis" do
+      merger = described_class.new(
+        template_content,
+        dest_content,
+        options: {strikethrough: true},
+      )
+
+      expect(merger.template_analysis).to be_a(Markdown::Merge::FileAnalysis)
+    end
+  end
+
+  describe "merge with various node types", :markdown_parsing do
+    let(:complex_template) do
+      <<~MARKDOWN
+        # Title
+
+        Intro paragraph.
+
+        ## Section A
+
+        > A block quote
+
+        - List item 1
+        - List item 2
+
+        ```ruby
+        puts "hello"
+        ```
+
+        ---
+
+        ## Section B
+
+        Final paragraph.
+      MARKDOWN
+    end
+
+    let(:complex_dest) do
+      <<~MARKDOWN
+        # Title
+
+        Custom intro paragraph.
+
+        ## Section A
+
+        > Modified block quote
+
+        - List item 1
+        - List item 2
+        - List item 3
+
+        ```ruby
+        puts "hello world"
+        ```
+
+        ---
+
+        ## Custom Section
+
+        New content.
+      MARKDOWN
+    end
+
+    it "handles all node types during merge" do
+      merger = described_class.new(complex_template, complex_dest)
+      result = merger.merge
+
+      expect(result).to be_a(String)
+      expect(result).to include("# Title")
+      expect(result).to include("Custom intro")
+    end
+
+    it "returns a MergeResult with stats" do
+      merger = described_class.new(complex_template, complex_dest)
+      result = merger.merge_result
+
+      expect(result).to be_a(Markdown::Merge::MergeResult)
+      expect(result.stats).to be_a(Hash)
+      expect(result.content).to be_a(String)
+    end
+  end
+
+  describe "backend consistency", :commonmarker_backend, :markly_backend do
     it "produces similar results across backends" do
       cm_merger = described_class.new(template_content, dest_content, backend: :commonmarker)
       markly_merger = described_class.new(template_content, dest_content, backend: :markly)
@@ -429,4 +653,3 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 end
-

@@ -1,4 +1,3 @@
-
 # frozen_string_literal: true
 
 RSpec.describe Markdown::Merge::NodeTypeNormalizer do
@@ -71,11 +70,6 @@ RSpec.describe Markdown::Merge::NodeTypeNormalizer do
   end
 
   describe ".register_backend" do
-    after do
-      # Clean up test backend
-      # Note: In real code we'd want a way to unregister, but for tests this is acceptable
-    end
-
     it "registers a new backend" do
       described_class.register_backend(:test_backend, {foo: :bar})
       expect(described_class.backend_registered?(:test_backend)).to be true
@@ -161,4 +155,3 @@ RSpec.describe Markdown::Merge::NodeTypeNormalizer do
     end
   end
 end
-

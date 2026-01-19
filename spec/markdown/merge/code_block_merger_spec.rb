@@ -106,8 +106,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
   describe "#merge_code_blocks" do
     def create_code_node(language:, content:)
       node = double("CodeBlock")
-      allow(node).to receive(:fence_info).and_return(language)
-      allow(node).to receive(:string_content).and_return(content)
+      allow(node).to receive_messages(fence_info: language, string_content: content)
       allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
       node
     end
@@ -304,8 +303,8 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
         result = merger.merge_code_blocks(template, dest, preference: :destination)
         expect(result[:merged]).to be(false)
         # When languages mismatch, it tries to use the first language (ruby)
-        # and fails when parsing the YAML content as Ruby
-        expect(result[:reason]).to match(/parse error|no merger|merge failed/)
+        # and fails when parsing the YAML content as Ruby, or the merger is not available
+        expect(result[:reason]).to match(/parse error|no merger|merge failed|merger gem not available/)
       end
     end
 
@@ -435,104 +434,105 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
     end
   end
 
-  describe "class methods" do
-    describe ".merge_with_prism", :prism_merge do
-      it "responds to merge_with_prism" do
-        expect(described_class).to respond_to(:merge_with_prism)
-      end
+  describe "language-specific merging via merge_code_blocks" do
+    # These tests exercise the full flow: merge_code_blocks -> DEFAULT_MERGERS lambda -> class method
+    # This is the intended API usage pattern
+
+    def create_code_node(language:, content:)
+      node = double("CodeBlock")
+      allow(node).to receive_messages(fence_info: language, string_content: content)
+      allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
+      node
+    end
+
+    describe "Ruby code blocks", :prism_merge do
+      let(:merger) { described_class.new }
 
       it "merges valid Ruby code" do
-        template = "def foo; 1; end"
-        dest = "def foo; 2; end"
+        template_node = create_code_node(language: "ruby", content: "def foo; 1; end")
+        dest_node = create_code_node(language: "ruby", content: "def foo; 2; end")
 
-        result = described_class.merge_with_prism(template, dest, :destination)
-        expect(result).to have_key(:merged)
-        expect(result).to have_key(:content)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:content]).to include("```ruby")
       end
 
-      it "handles parse errors" do
-        template = "def foo; end"
-        dest = "def foo {{{ invalid"
+      it "handles parse errors gracefully" do
+        template_node = create_code_node(language: "ruby", content: "def foo; end")
+        dest_node = create_code_node(language: "ruby", content: "def foo {{{ invalid")
 
-        result = described_class.merge_with_prism(template, dest, :destination)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
         expect(result[:merged]).to be(false)
-        expect(result[:reason]).to include("parse error")
+        expect(result[:reason]).to include("parse error").or include("merge failed")
       end
     end
 
-    describe ".merge_with_psych", :psych_merge do
-      it "responds to merge_with_psych" do
-        expect(described_class).to respond_to(:merge_with_psych)
-      end
+    describe "YAML code blocks", :psych_merge do
+      let(:merger) { described_class.new }
 
       it "merges valid YAML code" do
-        template = "key: value1"
-        dest = "key: value2"
+        template_node = create_code_node(language: "yaml", content: "key: value1")
+        dest_node = create_code_node(language: "yaml", content: "key: value2")
 
-        result = described_class.merge_with_psych(template, dest, :destination)
-        expect(result).to have_key(:merged)
-        expect(result).to have_key(:content)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:content]).to include("```yaml")
       end
 
-      it "handles parse errors with invalid YAML" do
-        template = "key: value"
-        dest = "- invalid:\n  yaml: [\n"  # Malformed YAML
+      it "handles parse errors gracefully" do
+        template_node = create_code_node(language: "yaml", content: "key: value")
+        dest_node = create_code_node(language: "yaml", content: "- invalid:\n  yaml: [\n")
 
-        result = described_class.merge_with_psych(template, dest, :destination)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
         # May or may not fail depending on psych-merge's tolerance
         expect(result).to have_key(:merged)
       end
     end
 
-    describe ".merge_with_json", :json_merge do
-      it "responds to merge_with_json" do
-        expect(described_class).to respond_to(:merge_with_json)
-      end
+    describe "JSON code blocks", :json_merge do
+      let(:merger) { described_class.new }
 
       it "merges valid JSON code" do
-        template = '{"key": "value1"}'
-        dest = '{"key": "value2"}'
+        template_node = create_code_node(language: "json", content: '{"key": "value1"}')
+        dest_node = create_code_node(language: "json", content: '{"key": "value2"}')
 
-        result = described_class.merge_with_json(template, dest, :destination)
-        expect(result).to have_key(:merged)
-        expect(result).to have_key(:content)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:content]).to include("```json")
       end
 
-      it "handles parse errors with invalid JSON" do
-        template = '{"key": "value"}'
-        dest = "{invalid json"
+      it "handles parse errors gracefully" do
+        template_node = create_code_node(language: "json", content: '{"key": "value"}')
+        dest_node = create_code_node(language: "json", content: "{invalid json")
 
-        result = described_class.merge_with_json(template, dest, :destination)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
         # Result depends on how json-merge handles invalid input
-        # It may return merged: false with parse error, or merged: true with fallback
         expect(result).to have_key(:merged)
         if result[:merged] == false
-          expect(result[:reason]).to include("parse error")
+          expect(result[:reason]).to include("parse error").or include("merge failed")
         end
       end
     end
 
-    describe ".merge_with_toml", :toml_merge do
-      it "responds to merge_with_toml" do
-        expect(described_class).to respond_to(:merge_with_toml)
+    describe "TOML code blocks", :toml_merge do
+      let(:merger) { described_class.new }
+
+      it "merges valid TOML code", :toml_merge, :toml_parsing do
+        template_node = create_code_node(language: "toml", content: "key = 'value1'")
+        dest_node = create_code_node(language: "toml", content: "key = 'value2'")
+
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:content]).to include("```toml")
       end
 
-      it "merges valid TOML code" do
-        template = "key = 'value1'"
-        dest = "key = 'value2'"
+      it "handles parse errors gracefully", :toml_merge, :toml_parsing do
+        template_node = create_code_node(language: "toml", content: "key = 'value'")
+        dest_node = create_code_node(language: "toml", content: "[invalid toml")
 
-        result = described_class.merge_with_toml(template, dest, :destination)
-        expect(result).to have_key(:merged)
-        expect(result).to have_key(:content)
-      end
-
-      it "handles parse errors with invalid TOML" do
-        template = "key = 'value'"
-        dest = "[invalid toml"
-
-        result = described_class.merge_with_toml(template, dest, :destination)
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
         expect(result[:merged]).to be(false)
-        expect(result[:reason]).to include("parse error")
+        expect(result[:reason]).to include("parse error").or include("merge failed")
       end
     end
   end
@@ -543,8 +543,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
 
     def create_code_node(language:, content:)
       node = double("CodeBlock")
-      allow(node).to receive(:fence_info).and_return(language)
-      allow(node).to receive(:string_content).and_return(content)
+      allow(node).to receive_messages(fence_info: language, string_content: content)
       allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
       node
     end

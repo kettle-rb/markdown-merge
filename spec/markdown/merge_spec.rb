@@ -101,10 +101,6 @@ RSpec.describe Markdown::Merge do
     end
 
     # Concrete implementations (tree_haver-based)
-    it "autoloads Backends" do
-      expect(described_class::Backends).to be_a(Module)
-    end
-
     it "autoloads NodeTypeNormalizer" do
       expect(described_class::NodeTypeNormalizer).to be_a(Module)
     end

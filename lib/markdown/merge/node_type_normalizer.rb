@@ -2,10 +2,18 @@
 
 module Markdown
   module Merge
+    # Alias for the shared normalizer module from ast-merge
+    NodeTypingNormalizer = Ast::Merge::NodeTyping::Normalizer
+
     # Normalizes backend-specific node types to canonical markdown types.
     #
     # Uses Ast::Merge::NodeTyping::Wrapper to wrap nodes with canonical
     # merge_type, allowing portable merge rules across backends.
+    #
+    # ## Thread Safety
+    #
+    # All backend registration and lookup operations are thread-safe via
+    # the shared Ast::Merge::NodeTyping::Normalizer module.
     #
     # ## Extensibility
     #
@@ -41,13 +49,16 @@ module Markdown
     # - `:custom_block` - Custom/extension blocks
     #
     # @see Ast::Merge::NodeTyping::Wrapper
+    # @see Ast::Merge::NodeTyping::Normalizer
     module NodeTypeNormalizer
-      # Default backend type mappings (extensible via register_backend)
+      extend NodeTypingNormalizer
+
+      # Configure default backend mappings.
       # Maps backend-specific type symbols to canonical type symbols.
       #
       # Includes both top-level block types and child node types (table rows, cells, etc.)
       # to enable consistent type checking across the entire AST.
-      @backend_mappings = {
+      configure_normalizer(
         commonmarker: {
           # Block types (top-level statements)
           heading: :heading,
@@ -109,107 +120,7 @@ module Markdown
           link: :link,
           image: :image,
         }.freeze,
-      }
-
-      class << self
-        # Register type mappings for a new backend.
-        #
-        # This allows extending markdown-merge to support additional
-        # markdown parsers beyond commonmarker and markly.
-        #
-        # @param backend [Symbol] Backend identifier (e.g., :tree_sitter_markdown)
-        # @param mappings [Hash{Symbol => Symbol}] Backend type → canonical type
-        # @return [Hash{Symbol => Symbol}] The frozen mappings
-        #
-        # @example
-        #   NodeTypeNormalizer.register_backend(:my_parser, {
-        #     h1: :heading,
-        #     h2: :heading,
-        #     para: :paragraph,
-        #   })
-        def register_backend(backend, mappings)
-          @backend_mappings[backend] = mappings.freeze
-        end
-
-        # Get the canonical type for a backend-specific type.
-        #
-        # If no mapping exists, returns the original type unchanged.
-        # This allows backend-specific types to pass through for
-        # backend-specific merge rules.
-        #
-        # @param backend_type [Symbol] The backend's node type
-        # @param backend [Symbol] The backend identifier
-        # @return [Symbol] Canonical type (or original if no mapping)
-        #
-        # @example
-        #   NodeTypeNormalizer.canonical_type(:header, :markly)
-        #   # => :heading
-        #
-        #   NodeTypeNormalizer.canonical_type(:heading, :commonmarker)
-        #   # => :heading
-        #
-        #   NodeTypeNormalizer.canonical_type(:unknown_type, :markly)
-        #   # => :unknown_type (passthrough)
-        def canonical_type(backend_type, backend)
-          return backend_type if backend_type.nil?
-
-          # Convert to symbol for lookup since tree_haver returns string types
-          type_sym = backend_type.to_sym
-          @backend_mappings.dig(backend, type_sym) || type_sym
-        end
-
-        # Wrap a node with its canonical type as merge_type.
-        #
-        # Uses Ast::Merge::NodeTyping.with_merge_type to create a wrapper
-        # that delegates all methods to the underlying node while adding
-        # a canonical merge_type attribute.
-        #
-        # @param node [Object] The backend node to wrap
-        # @param backend [Symbol] The backend identifier
-        # @return [Ast::Merge::NodeTyping::Wrapper] Wrapped node with canonical merge_type
-        #
-        # @example
-        #   # Markly node with type :header becomes wrapped with merge_type :heading
-        #   wrapped = NodeTypeNormalizer.wrap(markly_node, :markly)
-        #   wrapped.type        # => :header (original)
-        #   wrapped.merge_type  # => :heading (canonical)
-        #   wrapped.unwrap      # => markly_node (original node)
-        def wrap(node, backend)
-          canonical = canonical_type(node.type, backend)
-          Ast::Merge::NodeTyping.with_merge_type(node, canonical)
-        end
-
-        # Get all registered backends.
-        #
-        # @return [Array<Symbol>] Backend identifiers
-        def registered_backends
-          @backend_mappings.keys
-        end
-
-        # Check if a backend is registered.
-        #
-        # @param backend [Symbol] Backend identifier
-        # @return [Boolean]
-        def backend_registered?(backend)
-          @backend_mappings.key?(backend)
-        end
-
-        # Get the mappings for a specific backend.
-        #
-        # @param backend [Symbol] Backend identifier
-        # @return [Hash{Symbol => Symbol}, nil] The mappings or nil if not registered
-        def mappings_for(backend)
-          @backend_mappings[backend]
-        end
-
-        # Get all canonical types across all backends.
-        #
-        # @return [Array<Symbol>] Unique canonical type symbols
-        def canonical_types
-          @backend_mappings.values.flat_map(&:values).uniq
-        end
-      end
+      )
     end
   end
 end
-

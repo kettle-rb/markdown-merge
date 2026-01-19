@@ -24,6 +24,9 @@ gemfile do
   # Load markdown-merge from local path
   gem "markdown-merge", path: File.expand_path("..", __dir__)
 
+  # Load commonmarker-merge from local path
+  gem "commonmarker-merge", path: File.expand_path("../../commonmarker-merge", __dir__)
+
   # AST merging framework
   gem "ast-merge", path: File.expand_path("../../..", __dir__)
 
@@ -109,7 +112,7 @@ puts "✓ Backend: #{TreeHaver.backend_module}"
 puts
 
 # Check availability
-if TreeHaver::Backends::Commonmarker.available?
+if Commonmarker::Merge::Backend.available?
   puts "✓ Commonmarker is available"
 else
   puts "✗ Commonmarker not found - cannot run example"
@@ -124,7 +127,7 @@ puts "-" * 80
 merger = Markdown::Merge::SmartMerger.new(
   template_markdown,
   destination_markdown,
-  backend: :commonmarker
+  backend: :commonmarker,
 )
 
 result = merger.merge_result
@@ -186,4 +189,3 @@ puts "✓ Excellent error tolerance"
 puts "✓ Consistent Position API"
 puts "✓ Perfect for documentation workflows"
 puts "=" * 80
-

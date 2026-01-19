@@ -18,10 +18,13 @@ gemfile do
   gem "benchmark"
 
   # Parser
-  gem "markly", "~> 0.11"
+  gem "markly", "~> 0.12"
 
   # Load markdown-merge from local path
   gem "markdown-merge", path: File.expand_path("..", __dir__)
+
+  # Load markly-merge from local path
+  gem "markly-merge", path: File.expand_path("../../markly-merge", __dir__)
 
   # AST merging framework
   gem "ast-merge", path: File.expand_path("../../..", __dir__)
@@ -31,8 +34,8 @@ gemfile do
 end
 
 require "tree_haver"
-require "markdown/merge"
-require "markly" # Explicitly require markly
+require "markdown-merge"
+require "markly-merge"
 
 puts "=" * 80
 puts "Markdown::Merge with Markly Backend (GitHub Flavored Markdown)"
@@ -107,7 +110,7 @@ puts "✓ Backend: #{TreeHaver.backend_module}"
 puts
 
 # Check availability
-if TreeHaver::Backends::Markly.available?
+if Markly::Merge::Backend.available?
   puts "✓ Markly is available"
 else
   puts "✗ Markly not found - cannot run example"
@@ -122,7 +125,7 @@ puts "-" * 80
 merger = Markdown::Merge::SmartMerger.new(
   template_markdown,
   destination_markdown,
-  backend: :markly
+  backend: :markly,
 )
 
 result = merger.merge_result
@@ -192,4 +195,3 @@ puts "  - Merge API documentation updates with custom endpoints"
 puts "  - Maintain consistent structure across team documentation"
 puts "  - Preserve team-specific task lists and tables"
 puts "=" * 80
-

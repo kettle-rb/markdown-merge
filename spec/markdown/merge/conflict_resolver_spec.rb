@@ -5,8 +5,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
   def create_mock_node(name, content: "content", frozen: false, reason: nil)
     node = double(name)
     allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(frozen)
-    allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
-    allow(node).to receive(:to_commonmark).and_return(content)
+    allow(node).to receive_messages(source_position: {start_line: 1, end_line: 1}, to_commonmark: content)
 
     # Flexible respond_to? that handles all method checks
     known_methods = [:source_position, :to_commonmark]
@@ -19,9 +18,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
     end
 
     if frozen
-      allow(node).to receive(:freeze_node?).and_return(true)
-      allow(node).to receive(:reason).and_return(reason)
-      allow(node).to receive(:full_text).and_return(content)
+      allow(node).to receive_messages(freeze_node?: true, reason: reason, full_text: content)
     end
 
     node
@@ -183,8 +180,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
       it "falls back to to_commonmark" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:source_position).and_return({start_line: nil, end_line: 3})
-        allow(node).to receive(:to_commonmark).and_return("fallback markdown")
+        allow(node).to receive_messages(source_position: {start_line: nil, end_line: 3}, to_commonmark: "fallback markdown")
 
         result = resolver.send(:node_to_text, node, mock_template_analysis)
         expect(result).to eq("fallback markdown")
@@ -195,8 +191,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
       it "falls back to to_commonmark" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:source_position).and_return({start_line: 1, end_line: nil})
-        allow(node).to receive(:to_commonmark).and_return("fallback markdown")
+        allow(node).to receive_messages(source_position: {start_line: 1, end_line: nil}, to_commonmark: "fallback markdown")
 
         result = resolver.send(:node_to_text, node, mock_template_analysis)
         expect(result).to eq("fallback markdown")
@@ -207,8 +202,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
       it "falls back to to_commonmark" do
         node = double("Node")
         allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
-        allow(node).to receive(:source_position).and_return(nil)
-        allow(node).to receive(:to_commonmark).and_return("fallback markdown")
+        allow(node).to receive_messages(source_position: nil, to_commonmark: "fallback markdown")
 
         result = resolver.send(:node_to_text, node, mock_template_analysis)
         expect(result).to eq("fallback markdown")

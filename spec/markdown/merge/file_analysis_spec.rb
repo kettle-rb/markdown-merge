@@ -27,7 +27,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     MARKDOWN
   end
 
-  describe "#initialize", :markdown_backend do
+  describe "#initialize", :markdown_parsing do
     it "creates analysis with auto backend" do
       analysis = described_class.new(simple_markdown)
       expect(analysis).to be_a(described_class)
@@ -43,12 +43,12 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       expect([:commonmarker, :markly]).to include(analysis.backend)
     end
 
-    it "accepts explicit backend option", :commonmarker do
+    it "accepts explicit backend option", :commonmarker_backend do
       analysis = described_class.new(simple_markdown, backend: :commonmarker)
       expect(analysis.backend).to eq(:commonmarker)
     end
 
-    it "accepts markly backend option", :markly do
+    it "accepts markly backend option", :markly_backend do
       analysis = described_class.new(simple_markdown, backend: :markly)
       expect(analysis.backend).to eq(:markly)
     end
@@ -60,7 +60,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#statements", :markdown_backend do
+  describe "#statements", :markdown_parsing do
     it "returns an array of nodes" do
       analysis = described_class.new(simple_markdown)
       expect(analysis.statements).to be_an(Array)
@@ -83,7 +83,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#freeze_blocks", :markdown_backend do
+  describe "#freeze_blocks", :markdown_parsing do
     it "detects freeze blocks" do
       analysis = described_class.new(markdown_with_freeze)
       expect(analysis.freeze_blocks).not_to be_empty
@@ -97,7 +97,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#compute_parser_signature", :markdown_backend do
+  describe "#compute_parser_signature", :markdown_parsing do
     it "generates signatures for headings with level and content" do
       analysis = described_class.new(simple_markdown)
       heading = analysis.statements.first
@@ -255,9 +255,53 @@ RSpec.describe Markdown::Merge::FileAnalysis do
         end
       end
     end
+
+    context "with footnote definitions" do
+      let(:markdown_with_footnote) do
+        <<~MARKDOWN
+          # Footnote Example
+
+          Here is some text with a footnote[^1].
+
+          [^1]: This is the footnote content.
+        MARKDOWN
+      end
+
+      it "generates signatures for footnote definitions" do
+        analysis = described_class.new(markdown_with_footnote)
+        footnote = analysis.statements.find { |n| n.merge_type == :footnote_definition }
+
+        if footnote
+          signature = analysis.generate_signature(footnote)
+          expect(signature).to be_an(Array)
+          expect(signature.first).to eq(:footnote_definition)
+        end
+      end
+    end
+
+    context "with unknown node types" do
+      it "generates fallback signatures for unrecognized types" do
+        analysis = described_class.new(simple_markdown)
+        # Force an unknown type by directly calling compute_parser_signature
+        # with a mock node that has an unrecognized type
+        mock_node = double(
+          "UnknownNode",
+          type: :some_unknown_type,
+          source_position: {start_line: 1, end_line: 1},
+          respond_to?: ->(m) { [:type, :source_position].include?(m) },
+        )
+
+        # Wrap it to simulate typed node
+        allow(Ast::Merge::NodeTyping).to receive_messages(typed_node?: false, unwrap: mock_node)
+
+        signature = analysis.compute_parser_signature(mock_node)
+        expect(signature).to be_an(Array)
+        expect(signature.first).to eq(:unknown)
+      end
+    end
   end
 
-  describe "#next_sibling", :markdown_backend do
+  describe "#next_sibling", :markdown_parsing do
     it "returns next sibling node or nil" do
       analysis = described_class.new(simple_markdown)
       first_node = analysis.statements.first
@@ -271,7 +315,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#parser_node?", :markdown_backend do
+  describe "#parser_node?", :markdown_parsing do
     it "returns true for parser nodes" do
       analysis = described_class.new(simple_markdown)
       node = analysis.statements.first
@@ -286,7 +330,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#fallthrough_node?", :markdown_backend do
+  describe "#fallthrough_node?", :markdown_parsing do
     it "returns true for wrapped nodes" do
       analysis = described_class.new(simple_markdown)
       node = analysis.statements.first
@@ -302,7 +346,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#extract_text_content", :markdown_backend do
+  describe "#extract_text_content", :markdown_parsing do
     it "extracts text from nodes" do
       analysis = described_class.new(simple_markdown)
       heading = analysis.statements.first
@@ -313,7 +357,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#safe_string_content", :markdown_backend do
+  describe "#safe_string_content", :markdown_parsing do
     let(:markdown_with_code) do
       <<~MARKDOWN
         ```ruby
@@ -332,27 +376,35 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "#collect_top_level_nodes", :markdown_backend do
+  describe "#collect_top_level_nodes", :markdown_parsing do
     it "collects and wraps all top-level nodes" do
       analysis = described_class.new(simple_markdown)
       nodes = analysis.send(:collect_top_level_nodes)
 
       expect(nodes).to be_an(Array)
-      nodes.each do |node|
-        expect(node).to respond_to(:merge_type)
-      end
+      expect(nodes).to all(respond_to(:merge_type))
     end
   end
 
   describe "backend-specific options" do
-    context "with commonmarker", :commonmarker do
+    context "with commonmarker", :commonmarker_backend do
       it "accepts options hash" do
         analysis = described_class.new(simple_markdown, backend: :commonmarker, options: {})
         expect(analysis.backend).to eq(:commonmarker)
       end
+
+      it "creates parser with table extension by default" do
+        table_md = <<~MARKDOWN
+          | A | B |
+          |---|---|
+          | 1 | 2 |
+        MARKDOWN
+        analysis = described_class.new(table_md, backend: :commonmarker)
+        expect(analysis.statements).not_to be_empty
+      end
     end
 
-    context "with markly", :markly do
+    context "with markly", :markly_backend do
       it "accepts flags and extensions" do
         analysis = described_class.new(
           simple_markdown,
@@ -362,10 +414,179 @@ RSpec.describe Markdown::Merge::FileAnalysis do
         )
         expect(analysis.backend).to eq(:markly)
       end
+
+      it "creates parser with table extension by default" do
+        table_md = <<~MARKDOWN
+          | A | B |
+          |---|---|
+          | 1 | 2 |
+        MARKDOWN
+        analysis = described_class.new(table_md, backend: :markly)
+        expect(analysis.statements).not_to be_empty
+      end
     end
   end
 
-  describe "type normalization consistency", :commonmarker, :markly do
+  describe "#resolve_backend (private)", :markdown_parsing do
+    it "returns the backend when not :auto" do
+      analysis = described_class.new(simple_markdown)
+      # The backend should be resolved to either :commonmarker or :markly
+      expect([:commonmarker, :markly]).to include(analysis.backend)
+    end
+  end
+
+  describe "#create_parser (private)", :markdown_parsing do
+    it "creates a parser for the resolved backend" do
+      analysis = described_class.new(simple_markdown)
+      # Just verify parsing works
+      expect(analysis.statements).not_to be_empty
+    end
+  end
+
+  describe "#next_sibling", :markdown_parsing do
+    it "returns next sibling for nodes with next_sibling method" do
+      analysis = described_class.new(simple_markdown)
+      first_node = analysis.statements.first
+      raw_node = Ast::Merge::NodeTyping.unwrap(first_node)
+
+      # The result depends on the document structure
+      sibling = analysis.next_sibling(raw_node)
+      expect(sibling).to be_nil.or respond_to(:type)
+    end
+
+    it "falls back to :next method if next_sibling not available" do
+      analysis = described_class.new(simple_markdown)
+      # Create a mock node with only :next method
+      mock_node = double("Node")
+      allow(mock_node).to receive(:respond_to?).with(:next_sibling).and_return(false)
+      allow(mock_node).to receive(:respond_to?).with(:next).and_return(true)
+      allow(mock_node).to receive(:next).and_return(nil)
+
+      result = analysis.next_sibling(mock_node)
+      expect(result).to be_nil
+    end
+  end
+
+  describe "#safe_string_content", :markdown_parsing do
+    context "with code block" do
+      let(:code_markdown) do
+        <<~MARKDOWN
+          ```ruby
+          puts "hello"
+          ```
+        MARKDOWN
+      end
+
+      it "extracts content via string_content" do
+        analysis = described_class.new(code_markdown)
+        code_block = analysis.statements.first
+        raw_node = Ast::Merge::NodeTyping.unwrap(code_block)
+
+        content = analysis.safe_string_content(raw_node)
+        expect(content).to include("puts")
+      end
+    end
+
+    it "falls back to text method when string_content not available" do
+      analysis = described_class.new(simple_markdown)
+      mock_node = double("Node")
+      allow(mock_node).to receive(:respond_to?).with(:string_content).and_return(false)
+      allow(mock_node).to receive(:respond_to?).with(:text).and_return(true)
+      allow(mock_node).to receive(:text).and_return("fallback text")
+      allow(mock_node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(mock_node).to receive(:type).and_return(:text)
+      allow(mock_node).to receive(:respond_to?).with(:children).and_return(true)
+      allow(mock_node).to receive(:children).and_return([])
+
+      result = analysis.safe_string_content(mock_node)
+      expect(result).to eq("fallback text")
+    end
+
+    it "falls back to extract_text_content when both string_content and text unavailable" do
+      analysis = described_class.new(simple_markdown)
+      mock_node = double("Node")
+      allow(mock_node).to receive(:respond_to?).with(:string_content).and_return(false)
+      allow(mock_node).to receive(:respond_to?).with(:text).and_return(false)
+      allow(mock_node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(mock_node).to receive(:type).and_return(:paragraph)
+      allow(mock_node).to receive(:respond_to?).with(:children).and_return(true)
+      allow(mock_node).to receive(:children).and_return([])
+
+      result = analysis.safe_string_content(mock_node)
+      expect(result).to eq("")
+    end
+  end
+
+  describe "#compute_parser_signature comprehensive", :markdown_parsing do
+    context "with all node types" do
+      let(:comprehensive_markdown) do
+        <<~MARKDOWN
+          # Main Heading
+
+          A paragraph with some text.
+
+          ## Sub Heading
+
+          > A block quote
+          > spanning multiple lines
+
+          - List item 1
+          - List item 2
+          - List item 3
+
+          ```ruby
+          def hello
+            puts "world"
+          end
+          ```
+
+          ---
+
+          | Name | Value |
+          |------|-------|
+          | foo  | 100   |
+
+          <div>HTML content</div>
+        MARKDOWN
+      end
+
+      it "generates correct signatures for all node types" do
+        analysis = described_class.new(comprehensive_markdown)
+        statements = analysis.statements
+
+        # Collect all types
+        types = statements.map(&:merge_type)
+
+        # Should have various types
+        expect(types).to include(:heading)
+        expect(types).to include(:paragraph)
+
+        # Generate signatures for each
+        statements.each do |stmt|
+          signature = analysis.generate_signature(stmt)
+          expect(signature).to be_an(Array)
+          expect(signature.first).to be_a(Symbol)
+        end
+      end
+    end
+
+    context "with wrapped vs unwrapped nodes" do
+      it "handles both wrapped and unwrapped nodes" do
+        analysis = described_class.new(simple_markdown)
+        wrapped_node = analysis.statements.first
+        raw_node = Ast::Merge::NodeTyping.unwrap(wrapped_node)
+
+        # Both should produce signatures
+        wrapped_sig = analysis.generate_signature(wrapped_node)
+        raw_sig = analysis.compute_parser_signature(raw_node)
+
+        expect(wrapped_sig).to be_an(Array)
+        expect(raw_sig).to be_an(Array)
+      end
+    end
+  end
+
+  describe "type normalization consistency", :commonmarker_backend, :markly_backend do
     it "produces same canonical types for same content across backends" do
       cm_analysis = described_class.new(simple_markdown, backend: :commonmarker)
       markly_analysis = described_class.new(simple_markdown, backend: :markly)
@@ -380,5 +601,415 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       expect(markly_types).to include(:paragraph)
     end
   end
-end
 
+  # ============================================================
+  # Mocked Unit Tests (no markdown parsing backend required)
+  # ============================================================
+  # These tests use mocks to cover method branches without requiring
+  # actual markdown parsing backends (markly or commonmarker).
+
+  describe "#next_sibling (mocked)" do
+    # Create a minimal test class that exposes the method for testing
+    let(:test_class) do
+      Class.new(described_class) do
+        # Skip backend resolution for mock testing
+        def initialize
+          @backend = :mock
+          @parser = nil
+          @source = ""
+          @lines = []
+          @errors = []
+        end
+      end
+    end
+
+    let(:analysis) { test_class.new }
+
+    context "when node responds to :next_sibling" do
+      it "calls next_sibling" do
+        node = double("Node")
+        sibling = double("Sibling")
+        allow(node).to receive(:respond_to?).with(:next_sibling).and_return(true)
+        allow(node).to receive(:next_sibling).and_return(sibling)
+
+        result = analysis.next_sibling(node)
+        expect(result).to eq(sibling)
+      end
+    end
+
+    context "when node responds to :next but not :next_sibling" do
+      it "calls next" do
+        node = double("Node")
+        sibling = double("Sibling")
+        allow(node).to receive(:respond_to?).with(:next_sibling).and_return(false)
+        allow(node).to receive(:respond_to?).with(:next).and_return(true)
+        allow(node).to receive(:next).and_return(sibling)
+
+        result = analysis.next_sibling(node)
+        expect(result).to eq(sibling)
+      end
+    end
+
+    context "when node responds to neither" do
+      it "returns nil" do
+        node = double("Node")
+        allow(node).to receive(:respond_to?).with(:next_sibling).and_return(false)
+        allow(node).to receive(:respond_to?).with(:next).and_return(false)
+
+        result = analysis.next_sibling(node)
+        expect(result).to be_nil
+      end
+    end
+  end
+
+  describe "#parser_node? (mocked)" do
+    let(:test_class) do
+      Class.new(described_class) do
+        def initialize
+          @backend = :mock
+          @parser = nil
+          @source = ""
+          @lines = []
+          @errors = []
+        end
+      end
+    end
+
+    let(:analysis) { test_class.new }
+
+    context "when value responds to :type and :source_position" do
+      it "returns true" do
+        node = double("Node")
+        allow(node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(node).to receive(:respond_to?).with(:source_position).and_return(true)
+
+        expect(analysis.parser_node?(node)).to be true
+      end
+    end
+
+    context "when value is a typed node" do
+      it "returns true" do
+        node = double("Node")
+        allow(node).to receive(:respond_to?).with(:type).and_return(false)
+        allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(node).and_return(true)
+
+        expect(analysis.parser_node?(node)).to be true
+      end
+    end
+
+    context "when value is neither" do
+      it "returns false" do
+        value = "just a string"
+
+        expect(analysis.parser_node?(value)).to be false
+      end
+    end
+  end
+
+  describe "#compute_parser_signature (mocked)" do
+    let(:test_class) do
+      Class.new(described_class) do
+        def initialize
+          @backend = :mock
+          @parser = nil
+          @source = ""
+          @lines = []
+          @errors = []
+        end
+
+        # Expose protected methods for testing
+        public :compute_parser_signature, :extract_text_content, :safe_string_content,
+          :count_children, :extract_table_header_content
+      end
+    end
+
+    let(:analysis) { test_class.new }
+
+    # Helper to create mock nodes
+    def mock_node(type:, **attributes)
+      node = double("#{type.to_s.capitalize}Node")
+      allow(node).to receive(:type).and_return(type)
+      allow(node).to receive(:respond_to?) { |method| attributes.key?(method) || [:type].include?(method) }
+
+      attributes.each do |method, value|
+        allow(node).to receive(:respond_to?).with(method).and_return(true)
+        allow(node).to receive(method).and_return(value)
+      end
+
+      # Default source_position
+      unless attributes[:source_position]
+        allow(node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(node).to receive(:source_position).and_return({start_line: 1, end_line: 1})
+      end
+
+      # Stub NodeTyping
+      allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(node).and_return(false)
+      allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(node).and_return(node)
+
+      # Stub NodeTypeNormalizer
+      allow(Markdown::Merge::NodeTypeNormalizer).to receive(:canonical_type).with(type, :mock).and_return(type)
+
+      node
+    end
+
+    context "with :heading type" do
+      it "generates heading signature with level and content" do
+        node = mock_node(type: :heading, header_level: 2, first_child: nil)
+        allow(node).to receive(:respond_to?).with(:walk).and_return(false)
+        allow(node).to receive(:respond_to?).with(:children).and_return(true)
+        allow(node).to receive(:children).and_return([])
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:heading)
+        expect(sig[1]).to eq(2)
+      end
+    end
+
+    context "with :paragraph type" do
+      it "generates paragraph signature with content hash" do
+        node = mock_node(type: :paragraph, first_child: nil)
+        allow(node).to receive(:respond_to?).with(:walk).and_return(false)
+        allow(node).to receive(:respond_to?).with(:children).and_return(true)
+        allow(node).to receive(:children).and_return([])
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:paragraph)
+        expect(sig[1]).to be_a(String)
+        expect(sig[1].length).to eq(32)
+      end
+    end
+
+    context "with :code_block type" do
+      it "generates code_block signature with fence info" do
+        node = mock_node(type: :code_block, fence_info: "ruby", string_content: "puts 'hello'")
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:code_block)
+        expect(sig[1]).to eq("ruby")
+        expect(sig[2]).to be_a(String)
+        expect(sig[2].length).to eq(16)
+      end
+
+      it "handles missing fence_info" do
+        node = mock_node(type: :code_block, string_content: "some code")
+        allow(node).to receive(:respond_to?).with(:fence_info).and_return(false)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:code_block)
+        expect(sig[1]).to be_nil
+      end
+    end
+
+    context "with :list type" do
+      it "generates list signature with type and count" do
+        child1 = double("ListItem")
+        child2 = double("ListItem")
+        allow(child1).to receive(:next_sibling).and_return(child2)
+        allow(child2).to receive(:next_sibling).and_return(nil)
+
+        node = mock_node(type: :list, list_type: :bullet, first_child: child1)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:list)
+        expect(sig[1]).to eq(:bullet)
+        expect(sig[2]).to eq(2)
+      end
+
+      it "handles missing list_type" do
+        node = mock_node(type: :list, first_child: nil)
+        allow(node).to receive(:respond_to?).with(:list_type).and_return(false)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:list)
+        expect(sig[1]).to be_nil
+      end
+    end
+
+    context "with :block_quote type" do
+      it "generates block_quote signature with content hash" do
+        node = mock_node(type: :block_quote, first_child: nil)
+        allow(node).to receive(:respond_to?).with(:walk).and_return(false)
+        allow(node).to receive(:respond_to?).with(:children).and_return(true)
+        allow(node).to receive(:children).and_return([])
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:block_quote)
+        expect(sig[1]).to be_a(String)
+        expect(sig[1].length).to eq(16)
+      end
+    end
+
+    context "with :thematic_break type" do
+      it "generates simple thematic_break signature" do
+        node = mock_node(type: :thematic_break)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig).to eq([:thematic_break])
+      end
+    end
+
+    context "with :html_block type" do
+      it "generates html_block signature with content hash" do
+        node = mock_node(type: :html_block, string_content: "<div>content</div>")
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:html_block)
+        expect(sig[1]).to be_a(String)
+        expect(sig[1].length).to eq(16)
+      end
+    end
+
+    context "with :table type" do
+      it "generates table signature with row count and header hash" do
+        header_row = double("HeaderRow")
+        allow(header_row).to receive(:next_sibling).and_return(nil)
+        allow(header_row).to receive(:respond_to?).and_return(false)
+        allow(header_row).to receive(:respond_to?).with(:walk).and_return(false)
+        allow(header_row).to receive(:respond_to?).with(:children).and_return(true)
+        allow(header_row).to receive(:respond_to?).with(:type).and_return(true)
+        allow(header_row).to receive(:respond_to?).with(:string_content).and_return(false)
+        allow(header_row).to receive(:type).and_return(:table_row)
+        allow(header_row).to receive(:children).and_return([])
+
+        node = mock_node(type: :table, first_child: header_row)
+
+        # Also stub canonical_type for :table_row since it's called when processing header_row
+        allow(Markdown::Merge::NodeTypeNormalizer).to receive(:canonical_type).with(:table_row, :mock).and_return(:table_row)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:table)
+        expect(sig[1]).to eq(1) # row count
+        expect(sig[2]).to be_a(String)
+        expect(sig[2].length).to eq(16)
+      end
+    end
+
+    context "with :footnote_definition type" do
+      it "generates footnote signature with name" do
+        node = mock_node(type: :footnote_definition, name: "note1")
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:footnote_definition)
+        expect(sig[1]).to eq("note1")
+      end
+
+      it "falls back to string_content when name not available" do
+        node = mock_node(type: :footnote_definition, string_content: "footnote text")
+        allow(node).to receive(:respond_to?).with(:name).and_return(false)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:footnote_definition)
+        expect(sig[1]).to eq("footnote text")
+      end
+    end
+
+    context "with :custom_block type" do
+      it "generates custom_block signature with content hash" do
+        node = mock_node(type: :custom_block, first_child: nil)
+        allow(node).to receive(:respond_to?).with(:walk).and_return(false)
+        allow(node).to receive(:respond_to?).with(:children).and_return(true)
+        allow(node).to receive(:children).and_return([])
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:custom_block)
+        expect(sig[1]).to be_a(String)
+        expect(sig[1].length).to eq(16)
+      end
+    end
+
+    context "with unknown type" do
+      it "generates unknown signature with type and position" do
+        node = mock_node(type: :super_custom_node)
+        allow(Markdown::Merge::NodeTypeNormalizer).to receive(:canonical_type)
+          .with(:super_custom_node, :mock).and_return(:super_custom_node)
+
+        sig = analysis.compute_parser_signature(node)
+
+        expect(sig.first).to eq(:unknown)
+        expect(sig[1]).to eq(:super_custom_node)
+        expect(sig[2]).to eq(1) # start_line
+      end
+    end
+  end
+
+  describe "#freeze_node_class" do
+    let(:test_class) do
+      Class.new(described_class) do
+        def initialize
+          @backend = :mock
+        end
+      end
+    end
+
+    it "returns Markdown::Merge::FreezeNode" do
+      analysis = test_class.new
+      expect(analysis.freeze_node_class).to eq(Markdown::Merge::FreezeNode)
+    end
+  end
+
+  describe "#fallthrough_node? (mocked)" do
+    let(:test_class) do
+      Class.new(described_class) do
+        def initialize
+          @backend = :mock
+          @parser = nil
+          @source = ""
+          @lines = []
+          @errors = []
+        end
+      end
+    end
+
+    let(:analysis) { test_class.new }
+
+    it "returns true for typed nodes" do
+      node = double("TypedNode")
+      allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(node).and_return(true)
+
+      expect(analysis.fallthrough_node?(node)).to be true
+    end
+
+    it "returns true for FreezeNodeBase instances" do
+      freeze_node = Markdown::Merge::FreezeNode.new(
+        content: "frozen",
+        start_line: 1,
+        end_line: 3,
+        start_marker: "<!-- markdown-merge:freeze -->",
+        end_marker: "<!-- markdown-merge:unfreeze -->",
+      )
+
+      expect(analysis.fallthrough_node?(freeze_node)).to be true
+    end
+
+    it "returns true for parser nodes (using TestableNode)" do
+      # TestableNode is a real TreeHaver::Node that responds to :type and :source_position
+      node = TestableNode.create(type: :paragraph, text: "Hello", start_line: 1)
+
+      expect(analysis.fallthrough_node?(node)).to be true
+    end
+
+    it "returns true for parser nodes with mocked respond_to? behavior" do
+      # Keep this mock-based test for edge case where we need to test respond_to? specifically
+      node = double("ParserNode")
+      allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(node).and_return(false)
+      allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
+      allow(node).to receive(:respond_to?).with(:type).and_return(true)
+      allow(node).to receive(:respond_to?).with(:source_position).and_return(true)
+
+      expect(analysis.fallthrough_node?(node)).to be true
+    end
+  end
+end

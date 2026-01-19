@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>
+  File: ARCHITECTURE
+  
+    &mdash; Documentation by YARD 0.9.38
+  
+</title>
+
+  <link rel="stylesheet" href="css/style.css" type="text/css" />
+
+  <link rel="stylesheet" href="css/common.css" type="text/css" />
+
+<script type="text/javascript">
+  pathId = "ARCHITECTURE";
+  relpath = '';
+</script>
+
+
+  <script type="text/javascript" charset="utf-8" src="js/jquery.js"></script>
+
+  <script type="text/javascript" charset="utf-8" src="js/app.js"></script>
+
+
+  </head>
+  <body>
+    <div class="nav_wrap">
+      <iframe id="nav" src="file_list.html?1"></iframe>
+      <div id="resizer"></div>
+    </div>
+
+    <div id="main" tabindex="-1">
+      <div id="header">
+        <div id="menu">
+  
+    <a href="_index.html">Index</a> &raquo; 
+    <span class="title">File: ARCHITECTURE</span>
+  
+</div>
+
+        <div id="search">
+  
+    <a class="full_list_link" id="class_list_link"
+        href="class_list.html">
+
+        <svg width="24" height="24">
+          <rect x="0" y="4" width="24" height="4" rx="1" ry="1"></rect>
+          <rect x="0" y="12" width="24" height="4" rx="1" ry="1"></rect>
+          <rect x="0" y="20" width="24" height="4" rx="1" ry="1"></rect>
+        </svg>
+    </a>
+  
+</div>
+        <div class="clear"></div>
+      </div>
+
+      <div id="content"><div id='filecontents'><h1 id="markdown-merge-architecture">Markdown Merge Architecture</h1>
+
+<h2 id="overview">Overview</h2>
+
+<p>The markdown merge gems use a layered architecture with a shared base implementation and parser-specific wrappers.</p>
+
+<h2 id="architecture-layers">Architecture Layers</h2>
+
+<pre class="code ruby"><code class="ruby">┌─────────────────────────────────────────────────────┐
+│  Thin Wrappers (commonmarker-merge, markly-merge)  │
+│  - Parser-specific defaults                         │
+│  - Minimal subclasses                               │
+└─────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────┐
+│  Shared Implementation (markdown-merge)             │
+│  - SmartMergerBase (orchestration)                  │
+│  - OutputBuilder (output assembly)                  │
+│  - FileAnalysisBase (parsing &amp; analysis)            │
+│  - FileAligner (node matching)                      │
+│  - ConflictResolver (conflict resolution)           │
+│  - LinkParser (PEG-based link parsing via Parslet)  │
+│  - LinkReferenceRehydrator (inline→reference links) │
+│  - LinkDefinitionFormatter (definition formatting)  │
+└─────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────┐
+│  Infrastructure (ast-merge, tree_haver, parslet)    │
+│  - Parser backends                                  │
+│  - AST traversal                                    │
+│  - PEG parsing (via parslet gem)                    │
+│  - Common utilities                                 │
+└─────────────────────────────────────────────────────┘
+</code></pre>
+
+<h2 id="core-components">Core Components</h2>
+
+<h3 id="smartmergerbase-markdown-merge">SmartMergerBase (markdown-merge)</h3>
+
+<p>Orchestrates the merge process:</p>
+<ol>
+  <li>Parses template and destination files</li>
+  <li>Aligns nodes between files</li>
+  <li>Resolves conflicts using OutputBuilder</li>
+  <li>Assembles final merged content</li>
+</ol>
+
+<p><strong>Key Methods:</strong></p>
+<ul>
+  <li>
+<code>initialize</code> - Set up analyses, aligner, resolver</li>
+  <li>
+<code>merge</code> - Execute merge and return MergeResult</li>
+  <li>
+<code>process_alignment</code> - Process aligned nodes via OutputBuilder</li>
+</ul>
+
+<h3 id="outputbuilder-markdown-merge">OutputBuilder (markdown-merge)</h3>
+
+<p>Builds markdown output from merge operations:</p>
+
+<p><strong>Purpose:</strong></p>
+<ul>
+  <li>Consolidates all output assembly logic</li>
+  <li>Handles markdown-specific output concerns</li>
+  <li>Replaces manual string concatenation</li>
+</ul>
+
+<p><strong>Key Methods:</strong></p>
+<ul>
+  <li>
+<code>add_node_source(node, analysis)</code> - Extract and add node content</li>
+  <li>
+<code>add_link_definition(node)</code> - Reconstruct link references</li>
+  <li>
+<code>add_gap_line(count:)</code> - Preserve blank line spacing</li>
+  <li>
+<code>add_raw(text)</code> - Add raw text content</li>
+  <li>
+<code>to_s</code> - Get final assembled content</li>
+  <li>
+<code>empty?</code> - Check if builder has content</li>
+  <li>
+<code>clear</code> - Reset builder state</li>
+</ul>
+
+<p><strong>Design Rationale:</strong></p>
+<ul>
+  <li>Markdown uses <code>:node</code> strategy (node-by-node processing)</li>
+  <li>Focuses on <strong>source preservation</strong> rather than generation</li>
+  <li>Different from <code>:batch</code> strategy used in JSON/YAML/Bash/TOML</li>
+  <li>Not a traditional “Emitter” because it extracts source rather than generates</li>
+</ul>
+
+<h3 id="linkparser-markdown-merge">LinkParser (markdown-merge)</h3>
+
+<p>PEG-based parser for markdown link structures using Parslet:</p>
+
+<p><strong>Purpose:</strong></p>
+<ul>
+  <li>Parse link reference definitions from markdown content</li>
+  <li>Find inline links and images with their positions</li>
+  <li>Handle complex markdown link patterns robustly</li>
+</ul>
+
+<p><strong>Why Parslet?</strong></p>
+<ul>
+  <li>Handles emoji in labels (e.g., <code>[🖼️galtzo-discord]</code>)</li>
+  <li>Supports nested brackets (for linked images like <code>[![alt][ref]](url)</code>)</li>
+  <li>Multi-byte UTF-8 character support</li>
+  <li>Recursive grammar for balanced bracket/paren matching</li>
+  <li>No regex limitations or backtracking issues</li>
+</ul>
+
+<p><strong>Grammar Classes:</strong></p>
+<ul>
+  <li>
+<code>DefinitionGrammar</code> - Parses <code>[label]: url "title"</code> definitions</li>
+  <li>
+<code>InlineLinkGrammar</code> - Parses <code>[text](url "title")</code> inline links</li>
+  <li>
+<code>InlineImageGrammar</code> - Parses <code>![alt](url "title")</code> inline images</li>
+</ul>
+
+<p><strong>Key Methods:</strong></p>
+<ul>
+  <li>
+<code>parse_definitions(content)</code> - Extract all link definitions from content</li>
+  <li>
+<code>parse_definition_line(line)</code> - Parse single definition line</li>
+  <li>
+<code>find_inline_links(content)</code> - Find inline links with positions</li>
+  <li>
+<code>find_inline_images(content)</code> - Find inline images with positions</li>
+  <li>
+<code>build_url_to_label_map(definitions)</code> - Create URL→label mapping</li>
+</ul>
+
+<p><strong>Example:</strong></p>
+<pre class="code language-ruby"><code class="language-ruby">parser = LinkParser.new
+
+# Parse definitions
+defs = parser.parse_definitions(&quot;[example]: https://example.com\n[🎨logo]: https://logo.png&quot;)
+# =&gt; [{ label: &quot;example&quot;, url: &quot;https://example.com&quot; }, { label: &quot;🎨logo&quot;, url: &quot;https://logo.png&quot; }]
+
+# Find inline links
+links = parser.find_inline_links(&quot;Check [here](https://example.com) for info&quot;)
+# =&gt; [{ text: &quot;here&quot;, url: &quot;https://example.com&quot;, start_pos: 6, end_pos: 35 }]
+</code></pre>
+
+<h3 id="linkreferencerehydrator-markdown-merge">LinkReferenceRehydrator (markdown-merge)</h3>
+
+<p>Converts inline links back to reference-style links:</p>
+
+<p><strong>Purpose:</strong></p>
+<ul>
+  <li>cmark-based parsers convert <code>[text][label]</code> to <code>[text](url)</code> during <code>to_commonmark</code>
+</li>
+  <li>This class reverses that transformation using LinkParser</li>
+  <li>Preserves semantic meaning while maintaining reference definitions</li>
+</ul>
+
+<p><strong>Key Methods:</strong></p>
+<ul>
+  <li>
+<code>rehydrate</code> - Convert inline links/images to reference style</li>
+  <li>
+<code>link_definitions</code> - Get parsed link definitions</li>
+  <li>
+<code>duplicate_definitions</code> - Get URLs with multiple labels</li>
+  <li>
+<code>changed?</code> - Check if rehydration made changes</li>
+</ul>
+
+<p><strong>Example:</strong></p>
+<pre class="code language-ruby"><code class="language-ruby">content = &lt;&lt;~MD
+  Check out [Example](https://example.com) for more info.
+
+  [example]: https://example.com
+MD
+
+result = LinkReferenceRehydrator.rehydrate(content)
+# =&gt; &quot;Check out [Example][example] for more info.\n\n[example]: https://example.com\n&quot;
+</code></pre>
+
+<p><strong>Integration:</strong></p>
+<ul>
+  <li>Used by <code>SmartMergerBase</code> when <code>rehydrate_link_references: true</code>
+</li>
+  <li>Records duplicate definition problems in <code>DocumentProblems</code>
+</li>
+  <li>Works with both markly and commonmarker backends</li>
+</ul>
+
+<h3 id="linkdefinitionformatter-markdown-merge">LinkDefinitionFormatter (markdown-merge)</h3>
+
+<p>Formats link reference definitions for output:</p>
+
+<p><strong>Purpose:</strong></p>
+<ul>
+  <li>Reconstructs link definitions consumed by parsers</li>
+  <li>cmark-based parsers resolve link refs during parsing</li>
+  <li>Need to reconstruct them for output</li>
+</ul>
+
+<p><strong>Key Methods:</strong></p>
+<ul>
+  <li>
+<code>format(node)</code> - Format single link definition</li>
+  <li>
+<code>format_all(nodes, separator:)</code> - Format multiple definitions</li>
+</ul>
+
+<p><strong>Example:</strong></p>
+<pre class="code language-ruby"><code class="language-ruby"># Input: LinkDefinitionNode
+# Output: &quot;[ref]: https://example.com \&quot;Title\&quot;&quot;
+LinkDefinitionFormatter.format(node)
+</code></pre>
+
+<h3 id="fileanalysisbase-markdown-merge">FileAnalysisBase (markdown-merge)</h3>
+
+<p>Parses and analyzes markdown files:</p>
+<ul>
+  <li>Extracts top-level block elements</li>
+  <li>Identifies freeze blocks</li>
+  <li>Generates structural signatures</li>
+  <li>Provides source range access</li>
+</ul>
+
+<h3 id="filealigner-markdown-merge">FileAligner (markdown-merge)</h3>
+
+<p>Finds matches and differences between files:</p>
+<ul>
+  <li>Signature-based matching</li>
+  <li>Optional fuzzy matching via TableMatchRefiner</li>
+  <li>Produces alignment entries (match, template_only, dest_only)</li>
+</ul>
+
+<h3 id="conflictresolver-markdown-merge">ConflictResolver (markdown-merge)</h3>
+
+<p>Resolves conflicts using <code>:node</code> strategy:</p>
+<ul>
+  <li>Per-node-pair decisions</li>
+  <li>Configurable preference (destination vs template)</li>
+  <li>Returns resolution with source and decision</li>
+</ul>
+
+<h2 id="merge-workflow">Merge Workflow</h2>
+
+<pre class="code ruby"><code class="ruby">1. Parse Files
+   ├─ Create FileAnalysis for template
+   ├─ Create FileAnalysis for destination
+   └─ Extract nodes and signatures
+
+2. Align Nodes
+   ├─ Match nodes by signature
+   ├─ Apply fuzzy matching (optional)
+   └─ Produce alignment entries
+
+3. Process Alignment (via OutputBuilder)
+   ├─ For each alignment entry:
+   │  ├─ Match: Resolve conflict, add chosen node
+   │  ├─ Template-only: Conditionally add template node
+   │  └─ Dest-only: Add destination node
+   └─ Build OutputBuilder content
+
+4. Post-Processing (optional)
+   ├─ Link Reference Rehydration (if enabled):
+   │  ├─ Parse link definitions via LinkParser
+   │  ├─ Find inline links/images via LinkParser
+   │  ├─ Replace inline URLs with reference labels
+   │  └─ Track duplicate definitions as problems
+   └─ Whitespace normalization
+
+5. Assemble Output
+   ├─ Get content from OutputBuilder
+   ├─ Create MergeResult (with problems)
+   └─ Return to caller
+</code></pre>
+
+<h2 id="backend-architecture">Backend Architecture</h2>
+
+<h3 id="treehaver-backends">TreeHaver Backends</h3>
+
+<p>TreeHaver backends provide the parsing infrastructure. They are located in different gems depending on their purpose:</p>
+
+<h4 id="built-in-backends-in-tree_haver">Built-in Backends (in tree_haver)</h4>
+
+<p>Located in <code>tree_haver/lib/tree_haver/backends/</code>:</p>
+<ul>
+  <li>
+<code>mri.rb</code> - ruby_tree_sitter gem (C extension, MRI only)</li>
+  <li>
+<code>rust.rb</code> - tree_stump gem (Rust, MRI only)</li>
+  <li>
+<code>ffi.rb</code> - FFI backend with libtree-sitter</li>
+  <li>
+<code>java.rb</code> - jtreesitter (JRuby only)</li>
+  <li>
+<code>prism.rb</code> - Prism parser (Ruby code)</li>
+  <li>
+<code>psych.rb</code> - Psych parser (YAML)</li>
+  <li>
+<code>citrus.rb</code> - Citrus PEG parser</li>
+  <li>
+<code>parslet.rb</code> - Parslet PEG parser</li>
+</ul>
+
+<h4 id="markdown-backends-in--merge-gems">Markdown Backends (in *-merge gems)</h4>
+
+<p>Markdown backends are located in their respective merge gems because they integrate tightly with the merge functionality:</p>
+
+<ul>
+  <li>
+<code>markly-merge/lib/markly/merge/backend.rb</code> - Markly backend (cmark-gfm C library)</li>
+  <li>
+<code>commonmarker-merge/lib/commonmarker/merge/backend.rb</code> - Commonmarker backend (comrak Rust parser)</li>
+</ul>
+
+<p>These ARE TreeHaver backends - they implement the TreeHaver backend protocol with:</p>
+<ul>
+  <li>
+<code>Backend::Language</code> - Language configuration</li>
+  <li>
+<code>Backend::Parser</code> - Parser wrapper</li>
+  <li>
+<code>Backend::Tree</code> - Parse tree wrapper</li>
+  <li>
+<code>Backend::Node</code> - Node wrapper with TreeHaver::Node protocol</li>
+</ul>
+
+<p>They register with <code>TreeHaver::BackendRegistry</code> for tag support and availability checking.</p>
+
+<h2 id="parser-integration">Parser Integration</h2>
+
+<h3 id="commonmarker-merge">Commonmarker-Merge</h3>
+
+<p>Thin wrapper around markdown-merge:</p>
+<ul>
+  <li>Forces <code>:commonmarker</code> backend</li>
+  <li>Sets commonmarker-specific defaults</li>
+  <li>Exposes commonmarker options hash</li>
+</ul>
+
+<h3 id="markly-merge">Markly-Merge</h3>
+
+<p>Thin wrapper around markdown-merge:</p>
+<ul>
+  <li>Forces <code>:markly</code> backend</li>
+  <li>Sets markly-specific defaults (inner_merge_code_blocks: true)</li>
+  <li>Exposes markly flags and extensions</li>
+</ul>
+
+<h2 id="output-assembly-outputbuilder-pattern">Output Assembly: OutputBuilder Pattern</h2>
+
+<h3 id="why-outputbuilder-instead-of-emitter">Why OutputBuilder Instead of Emitter?</h3>
+
+<p><strong>Different Strategy:</strong></p>
+<ul>
+  <li>JSON/YAML/Bash/TOML use <code>:batch</code> strategy (process all at once, generate output)</li>
+  <li>Markdown uses <code>:node</code> strategy (process pairs individually, preserve source)</li>
+</ul>
+
+<p><strong>Source Preservation:</strong></p>
+<ul>
+  <li>Emitter <strong>generates</strong> output from scratch</li>
+  <li>OutputBuilder <strong>extracts</strong> source + <strong>reconstructs</strong> missing pieces</li>
+</ul>
+
+<p><strong>Markdown Quirks:</strong></p>
+<ul>
+  <li>Parser consumes link reference definitions</li>
+  <li>Normalizes whitespace, table alignment</li>
+  <li>OutputBuilder handles extraction and reconstruction</li>
+  <li>LinkParser (Parslet-based) handles link definition parsing</li>
+  <li>LinkReferenceRehydrator restores reference-style links</li>
+</ul>
+
+<h3 id="outputbuilder-vs-manual-assembly">OutputBuilder vs Manual Assembly</h3>
+
+<p><strong>Before:</strong></p>
+<pre class="code language-ruby"><code class="language-ruby">merged_parts = []
+merged_parts &lt;&lt; node_to_source(node1, analysis)
+merged_parts &lt;&lt; node_to_source(node2, analysis)
+content = merged_parts.join(&quot;\n&quot;)
+</code></pre>
+
+<p><strong>After:</strong></p>
+<pre class="code language-ruby"><code class="language-ruby">builder = OutputBuilder.new
+builder.add_node_source(node1, analysis)
+builder.add_node_source(node2, analysis)
+content = builder.to_s
+</code></pre>
+
+<p><strong>Benefits:</strong></p>
+<ul>
+  <li>Centralized logic</li>
+  <li>Handles special node types automatically</li>
+  <li>Clean, testable interface</li>
+  <li>Easier to extend</li>
+</ul>
+
+<h2 id="extension-points">Extension Points</h2>
+
+<h3 id="adding-new-parsers">Adding New Parsers</h3>
+
+<p>To add support for a new markdown parser (e.g., kramdown):</p>
+
+<ol>
+  <li>Create a new gem: <code>kramdown-merge</code>
+</li>
+  <li>Subclass <code>Markdown::Merge::SmartMerger</code>
+</li>
+  <li>Implement parser-specific methods:
+    <ul>
+      <li>
+<code>create_file_analysis</code> - Create parser-specific FileAnalysis</li>
+      <li>
+<code>template_parse_error_class</code> - Parser-specific error class</li>
+      <li>
+<code>destination_parse_error_class</code> - Parser-specific error class</li>
+    </ul>
+  </li>
+  <li>Override <code>initialize</code> to set parser-specific defaults</li>
+  <li>OutputBuilder integration is automatic (inherited)</li>
+</ol>
+
+<h3 id="custom-signature-generators">Custom Signature Generators</h3>
+
+<p>Provide custom node matching logic:</p>
+
+<pre class="code language-ruby"><code class="language-ruby">sig_gen = -&gt;(node) {
+  if node.type == :heading
+    [:heading, node.header_level]  # Match by level only
+  else
+    node  # Fall through to default
+  end
+}
+
+merger = SmartMerger.new(
+  template,
+  destination,
+  signature_generator: sig_gen
+)
+</code></pre>
+
+<h3 id="custom-match-refiners">Custom Match Refiners</h3>
+
+<p>Add fuzzy matching for unmatched nodes:</p>
+
+<pre class="code language-ruby"><code class="language-ruby">refiner = TableMatchRefiner.new(similarity_threshold: 0.7)
+
+merger = SmartMerger.new(
+  template,
+  destination,
+  match_refiner: refiner
+)
+</code></pre>
+
+<h2 id="testing">Testing</h2>
+
+<h3 id="outputbuilder-testing">OutputBuilder Testing</h3>
+
+<pre class="code language-ruby"><code class="language-ruby">builder = OutputBuilder.new
+
+# Add content
+builder.add_raw(&quot;# Heading\n&quot;)
+builder.add_gap_line(count: 1)
+builder.add_node_source(node, analysis)
+
+# Check state
+builder.empty?  # =&gt; false
+
+# Get output
+content = builder.to_s
+
+# Reset
+builder.clear
+</code></pre>
+
+<h3 id="end-to-end-testing">End-to-End Testing</h3>
+
+<pre class="code language-ruby"><code class="language-ruby">merger = SmartMerger.new(template, destination)
+result = merger.merge
+
+# Verify result
+expect(result.success?).to be true
+expect(result.content).to include(&quot;expected content&quot;)
+</code></pre>
+
+<h2 id="performance-considerations">Performance Considerations</h2>
+
+<ul>
+  <li>Node-by-node processing (<code>:node</code> strategy) vs batch processing</li>
+  <li>Source extraction preferred over re-generation</li>
+  <li>Signature computation cached in FileAnalysis</li>
+  <li>Alignment computed once, reused for resolution</li>
+</ul>
+
+<h2 id="future-enhancements">Future Enhancements</h2>
+
+<h3 id="potential-improvements">Potential Improvements</h3>
+
+<ol>
+  <li>
+<strong>Streaming Output</strong>: OutputBuilder could support streaming for large files</li>
+  <li>
+<strong>Configurable Formatting</strong>: Add options for whitespace normalization</li>
+  <li>
+<strong>Enhanced Link Reference Validation</strong>: Warn about unused link definitions</li>
+  <li>
+<strong>Enhanced Backend Integration</strong>: Expand merge-specific backend helpers</li>
+  <li>
+<strong>Additional Parsers</strong>: kramdown, markdown-it, etc.</li>
+  <li>
+<strong>Link Definition Deduplication</strong>: Automatically merge duplicate definitions</li>
+</ol>
+
+<h3 id="compatibility">Compatibility</h3>
+
+<p>The architecture is designed for extensibility:</p>
+<ul>
+  <li>New parsers can be added without changing core logic</li>
+  <li>OutputBuilder can be enhanced without breaking subclasses</li>
+  <li>Backend helpers can be expanded as needed</li>
+</ul>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li><a href="../markdown-merge/README.md">markdown-merge README</a></li>
+  <li><a href="../commonmarker-merge/README.md">commonmarker-merge README</a></li>
+  <li><a href="../markly-merge/README.md">markly-merge README</a></li>
+  <li><a href="../tmp/MARKDOWN_EMITTER_INVESTIGATION.md">Markdown Consolidation Investigation</a></li>
+  <li><a href="../tmp/MARKDOWN_CONSOLIDATION_PROGRESS.md">Implementation Progress</a></li>
+</ul>
+</div></div>
+
+      <div id="footer">
+  Generated on Mon Jan 19 02:23:37 2026 by
+  <a href="https://yardoc.org" title="Yay! A Ruby Documentation Tool" target="_parent">yard</a>
+  0.9.38 (ruby-4.0.1).
+</div>
+
+    </div>
+  </body>
+</html>

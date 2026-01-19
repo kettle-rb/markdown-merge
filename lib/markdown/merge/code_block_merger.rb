@@ -209,6 +209,8 @@ module Markdown
         # @param dest [String] Destination Ruby code
         # @param preference [Symbol] :destination or :template
         # @return [Hash] Merge result
+        # @raise [Prism::Merge::ParseError] If template or dest has syntax errors
+        # @note Errors are handled by merge_code_blocks when called via DEFAULT_MERGERS
         def merge_with_prism(template, dest, preference, **opts)
           merger = ::Prism::Merge::SmartMerger.new(
             template,
@@ -222,8 +224,6 @@ module Markdown
             content: merger.merge,
             stats: merger.stats,
           }
-        rescue ::Prism::Merge::ParseError => e
-          {merged: false, reason: "Ruby parse error: #{e.message}"}
         end
 
         # Merge YAML code using psych-merge.
@@ -232,6 +232,8 @@ module Markdown
         # @param dest [String] Destination YAML code
         # @param preference [Symbol] :destination or :template
         # @return [Hash] Merge result
+        # @raise [Psych::Merge::ParseError] If template or dest has syntax errors
+        # @note Errors are handled by merge_code_blocks when called via DEFAULT_MERGERS
         def merge_with_psych(template, dest, preference, **opts)
           merger = ::Psych::Merge::SmartMerger.new(
             template,
@@ -245,8 +247,6 @@ module Markdown
             content: merger.merge,
             stats: merger.stats,
           }
-        rescue ::Psych::Merge::ParseError => e
-          {merged: false, reason: "YAML parse error: #{e.message}"}
         end
 
         # Merge JSON code using json-merge.
@@ -255,6 +255,8 @@ module Markdown
         # @param dest [String] Destination JSON code
         # @param preference [Symbol] :destination or :template
         # @return [Hash] Merge result
+        # @raise [Json::Merge::ParseError] If template or dest has syntax errors
+        # @note Errors are handled by merge_code_blocks when called via DEFAULT_MERGERS
         def merge_with_json(template, dest, preference, **opts)
           merger = ::Json::Merge::SmartMerger.new(
             template,
@@ -268,10 +270,6 @@ module Markdown
             content: merger.merge,
             stats: merger.stats,
           }
-        # :nocov: integration - requires json/merge gem
-        rescue ::Json::Merge::ParseError => e
-          {merged: false, reason: "JSON parse error: #{e.message}"}
-          # :nocov:
         end
 
         # Merge TOML code using toml-merge.
@@ -280,6 +278,8 @@ module Markdown
         # @param dest [String] Destination TOML code
         # @param preference [Symbol] :destination or :template
         # @return [Hash] Merge result
+        # @raise [Toml::Merge::ParseError] If template or dest has syntax errors
+        # @note Errors are handled by merge_code_blocks when called via DEFAULT_MERGERS
         def merge_with_toml(template, dest, preference, **opts)
           merger = ::Toml::Merge::SmartMerger.new(
             template,
@@ -293,8 +293,6 @@ module Markdown
             content: merger.merge,
             stats: merger.stats,
           }
-        rescue ::Toml::Merge::ParseError => e
-          {merged: false, reason: "TOML parse error: #{e.message}"}
         end
       end
     end

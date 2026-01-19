@@ -60,12 +60,11 @@ module Markdown
       #   For markly: { flags: Markly::DEFAULT, extensions: [:table] }
       def initialize(
         source,
-        backend: Backends::AUTO,
+        backend: :auto,
         freeze_token: DEFAULT_FREEZE_TOKEN,
         signature_generator: nil,
         **parser_options
       )
-        Backends.validate!(backend)
         @requested_backend = backend
         @parser_options = parser_options
 
@@ -78,11 +77,22 @@ module Markdown
 
       # Parse the source document using tree_haver backend.
       #
+      # Error handling follows the same pattern as other *-merge gems:
+      # - TreeHaver::Error (which inherits from Exception, not StandardError) is caught
+      # - TreeHaver::NotAvailable is a subclass of TreeHaver::Error, so it's also caught
+      # - When an error occurs, the error is stored in @errors and nil is returned
+      # - SmartMergerBase#parse_and_analyze checks valid? and raises the appropriate parse error
+      #
       # @param source [String] Markdown source to parse
-      # @return [Object] Root document node from tree_haver
+      # @return [Object, nil] Root document node from tree_haver, or nil on error
       def parse_document(source)
         tree = @parser.parse(source)
         tree.root_node
+      rescue TreeHaver::Error => e
+        # TreeHaver::Error inherits from Exception, not StandardError.
+        # This also catches TreeHaver::NotAvailable (subclass of Error).
+        @errors << e.message
+        nil
       end
 
       # Get the next sibling of a node.
@@ -286,12 +296,12 @@ module Markdown
       # @param backend [Symbol] Requested backend
       # @return [Symbol] Resolved backend (:commonmarker or :markly)
       def resolve_backend(backend)
-        return backend unless backend == Backends::AUTO
+        return backend unless backend == :auto
 
         # Try commonmarker first, then markly
-        if TreeHaver::Backends::Commonmarker.available?
+        if TreeHaver::BackendRegistry.available?(:commonmarker)
           :commonmarker
-        elsif TreeHaver::Backends::Markly.available?
+        elsif TreeHaver::BackendRegistry.available?(:markly)
           :markly
         else
           # Let tree_haver raise the appropriate error
@@ -313,26 +323,26 @@ module Markdown
         end
       end
 
-      # Create a Commonmarker parser via tree_haver.
+      # Create a Commonmarker parser via commonmarker-merge backend.
       #
-      # @return [TreeHaver::Backends::Commonmarker::Parser]
+      # @return [Commonmarker::Merge::Backend::Parser]
       def create_commonmarker_parser
-        parser = TreeHaver::Backends::Commonmarker::Parser.new
+        parser = Commonmarker::Merge::Backend::Parser.new
         # Default options enable table extension for GFM compatibility
         default_options = {extension: {table: true}}
         options = default_options.merge(@parser_options[:options] || {})
-        parser.language = TreeHaver::Backends::Commonmarker::Language.markdown(options: options)
+        parser.language = Commonmarker::Merge::Backend::Language.markdown(options: options)
         parser
       end
 
-      # Create a Markly parser via tree_haver.
+      # Create a Markly parser via markly-merge backend.
       #
-      # @return [TreeHaver::Backends::Markly::Parser]
+      # @return [Markly::Merge::Backend::Parser]
       def create_markly_parser
-        parser = TreeHaver::Backends::Markly::Parser.new
+        parser = Markly::Merge::Backend::Parser.new
         flags = @parser_options[:flags]
         extensions = @parser_options[:extensions] || [:table]
-        parser.language = TreeHaver::Backends::Markly::Language.markdown(
+        parser.language = Markly::Merge::Backend::Language.markdown(
           flags: flags,
           extensions: extensions,
         )
@@ -341,4 +351,3 @@ module Markdown
     end
   end
 end
-
