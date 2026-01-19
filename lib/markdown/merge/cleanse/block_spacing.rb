@@ -42,9 +42,36 @@ module Markdown
         # Block-level HTML elements that can span multiple lines
         # These create a context where we shouldn't insert blank lines
         HTML_BLOCK_ELEMENTS = %w[
-          ul ol li dl dt dd div table thead tbody tfoot tr th td
-          blockquote pre figure figcaption details summary section
-          article aside nav header footer main address form fieldset
+          ul
+          ol
+          li
+          dl
+          dt
+          dd
+          div
+          table
+          thead
+          tbody
+          tfoot
+          tr
+          th
+          td
+          blockquote
+          pre
+          figure
+          figcaption
+          details
+          summary
+          section
+          article
+          aside
+          nav
+          header
+          footer
+          main
+          address
+          form
+          fieldset
         ].freeze
 
         # Pattern to match opening block-level HTML tags
@@ -131,7 +158,7 @@ module Markdown
 
           lines.each_with_index do |line, idx|
             next_line = lines[idx + 1]
-            prev_line = idx > 0 ? lines[idx - 1] : nil
+            prev_line = (idx > 0) ? lines[idx - 1] : nil
 
             # Special case: closing tags for markdown containers like </details>
             # These contain markdown content, so we need blank lines before them
@@ -139,7 +166,7 @@ module Markdown
             is_markdown_container_close = line.match?(MARKDOWN_CONTAINER_CLOSE)
 
             # Check for issues BEFORE updating depth
-            unless html_block_depth > 0
+            if html_block_depth <= 0
               # Check for issues that need blank line AFTER current line
               if next_line && !next_line.strip.empty?
                 check_thematic_break(line, next_line, idx)

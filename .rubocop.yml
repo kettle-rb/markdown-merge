@@ -6,13 +6,20 @@ inherit_from:
 
 plugins: rubocop-on-rbs
 
+inherit_mode:
+  merge:
+    - Exclude
+
 AllCops:
   Exclude:
+    - .bundle/**/*
     - certs/**/*
     - checksums/**/*
     - docs/**/*
     - fixtures/**/*
     - gemfiles/*.gemfile
+    - gemfiles/.bundle/**/*
+    - gemfiles/vendor/**/*
     - pkg/**/*
     - results/**/*
     - spec/fixtures/**/*
