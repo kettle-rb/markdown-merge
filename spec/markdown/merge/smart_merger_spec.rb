@@ -678,7 +678,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
-  describe "backend consistency", :commonmarker_backend, :markly_backend do
+  describe "backend consistency", :commonmarker_merge, :markly_merge do
     it "produces similar results across backends" do
       cm_merger = described_class.new(template_content, dest_content, backend: :commonmarker)
       markly_merger = described_class.new(template_content, dest_content, backend: :markly)

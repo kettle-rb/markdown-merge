@@ -22,6 +22,8 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Changed
 
+- Upgrade to [ast-merge v4.0.3](https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.3)
+
 ### Deprecated
 
 ### Removed

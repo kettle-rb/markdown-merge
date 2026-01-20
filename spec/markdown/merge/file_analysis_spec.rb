@@ -354,7 +354,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
   end
 
   describe "backend-specific options" do
-    context "with commonmarker", :commonmarker_backend do
+    context "with commonmarker", :commonmarker_merge do
       it "accepts options hash" do
         analysis = described_class.new(simple_markdown, backend: :commonmarker, options: {})
         expect(analysis.backend).to eq(:commonmarker)
@@ -371,7 +371,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       end
     end
 
-    context "with markly", :markly_backend do
+    context "with markly", :markly_merge do
       it "accepts flags and extensions" do
         # Use dynamic constant lookup to avoid parse-time errors when markly isn't available
         markly_default = Object.const_get("Markly::DEFAULT")
@@ -552,7 +552,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
-  describe "type normalization consistency", :commonmarker_backend, :markly_backend do
+  describe "type normalization consistency", :commonmarker_merge, :markly_merge do
     it "produces same canonical types for same content across backends" do
       cm_analysis = described_class.new(simple_markdown, backend: :commonmarker)
       markly_analysis = described_class.new(simple_markdown, backend: :markly)

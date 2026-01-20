@@ -1,5 +1,5 @@
 {
-  "README.md:1201647396": [
-    [438, 7, 1, "Lint/Syntax: unexpected token tCOLON\n(Using Ruby 3.2 parser; configure using `TargetRubyVersion` parameter, under `AllCops`)", 177567]
+  "README.md:2078325761": [
+    [441, 7, 1, "Lint/Syntax: unexpected token tCOLON\n(Using Ruby 3.2 parser; configure using `TargetRubyVersion` parameter, under `AllCops`)", 177567]
   ]
 }
