@@ -68,16 +68,11 @@ and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semant
 and <a href="https://tom.preston-werner.com/2022/05/23/major-version-numbers-are-not-sacred.html">yes</a>, platform and engine support are part of the <a href="https://github.com/semver/semver/issues/716#issuecomment-869336139">public API</a>.<br>
 Please file a bug if you notice a violation of semantic versioning.</p>
 
-<h2 id="unreleased"><a href="https://github.com/kettle-rb/markdown-merge/compare/v1.0.0...HEAD">Unreleased</a></h2>
+<h2 id="unreleased"><a href="https://github.com/kettle-rb/markdown-merge/compare/v1.0.1...HEAD">Unreleased</a></h2>
 
 <h3 id="added">Added</h3>
 
 <h3 id="changed">Changed</h3>
-
-<ul>
-  <li>Upgrade to <a href="https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.3">ast-merge v4.0.3</a>
-</li>
-</ul>
 
 <h3 id="deprecated">Deprecated</h3>
 
@@ -86,6 +81,24 @@ Please file a bug if you notice a violation of semantic versioning.</p>
 <h3 id="fixed">Fixed</h3>
 
 <h3 id="security">Security</h3>
+
+<h2 id="101---2026-01-20">
+<a href="https://github.com/kettle-rb/markdown-merge/compare/v1.0.0...v1.0.1">1.0.1</a> - 2026-01-20</h2>
+
+<ul>
+  <li>TAG: <a href="https://github.com/kettle-rb/markdown-merge/releases/tag/v1.0.1">v1.0.1</a>
+</li>
+  <li>COVERAGE: 93.12% – 1611/1730 lines in 25 files</li>
+  <li>BRANCH COVERAGE: 81.52% – 525/644 branches in 25 files</li>
+  <li>96.92% documented</li>
+</ul>
+
+<h3 id="changed-1">Changed</h3>
+
+<ul>
+  <li>Upgrade to <a href="https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.3">ast-merge v4.0.3</a>
+</li>
+</ul>
 
 <h2 id="100---2026-01-19">
 <a href="https://github.com/kettle-rb/markdown-merge/compare/76f2230840b236dd10fdd7baf322c082762dddb0...v1.0.0">1.0.0</a> - 2026-01-19</h2>
@@ -323,7 +336,7 @@ for creating real node instances in tests instead of fragile mocks
   </li>
 </ul>
 
-<h3 id="changed-1">Changed</h3>
+<h3 id="changed-2">Changed</h3>
 
 <ul>
   <li>Upgrade to <a href="https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.2">ast-merge v4.0.2</a>
@@ -505,42 +518,4 @@ to include child replacements before parent is processed</li>
     </ul>
   </li>
   <li>
-<strong>Lint cleanup</strong>: Fixed RSpec/ReceiveMessages cops by combining multiple <code>receive</code> stubs</li>
-  <li>
-<strong>Style fixes</strong>: Fixed Style/ClassMethodsDefinitions in <code>LinkDefinitionNode</code> using <code>class &lt;&lt; self</code>
-</li>
-  <li>
-<strong>Layout fixes</strong>: Removed extra blank lines in <code>mock_helpers.rb</code>
-</li>
-  <li>
-<strong>Freeze block detection</strong>: Fixed <code>find_freeze_markers</code> to handle both raw parser types<br>
-(<code>:html</code>) and TreeHaver normalized types (<code>"html_block"</code>, <code>:html_block</code>). Previously,<br>
-freeze markers were not detected when using TreeHaver backends because the node type<br>
-check only looked for <code>:html</code>.</li>
-  <li>
-<strong>Freeze marker content extraction</strong>: Now uses a three-tier fallback for extracting<br>
-HTML comment content:
-    <ol>
-      <li>
-<code>string_content</code> (raw Markly/Commonmarker nodes)</li>
-      <li>
-<code>to_commonmark</code> on the wrapper node</li>
-      <li>
-<code>inner_node.to_commonmark</code> (TreeHaver Commonmarker wrapper)<br>
-This fixes freeze block detection for Commonmarker where the TreeHaver wrapper’s<br>
-content methods return empty but the inner node has the actual content.</li>
-    </ol>
-  </li>
-</ul>
-
-</div></div>
-
-      <div id="footer">
-  Generated on Tue Jan 20 00:06:06 2026 by
-  <a href="https://yardoc.org" title="Yay! A Ruby Documentation Tool" target="_parent">yard</a>
-  0.9.38 (ruby-4.0.1).
-</div>
-
-    </div>
-  </body>
-</html>
+<strong>Lint cleanup</strong>: Fixed RSpec/ReceiveMessages cops by combining multiple <code>receive</code> stubs
