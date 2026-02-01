@@ -6,17 +6,21 @@ inherit_from:
 
 plugins: rubocop-on-rbs
 
+# This tells RuboCop to add the exclusions in this file
+# to the default exclusions (and those from other inherited files),
+# rather than overwriting them.
+inherit_mode:
+  merge:
+    - Exclude
+
 AllCops:
   Exclude:
-    - .bundle/**/*
     - certs/**/*
     - checksums/**/*
     - docs/**/*
     - examples/**/*
     - fixtures/**/*
     - gemfiles/*.gemfile
-    - gemfiles/.bundle/**/*
-    - gemfiles/vendor/**/*
     - pkg/**/*
     - results/**/*
     - spec/fixtures/**/*
