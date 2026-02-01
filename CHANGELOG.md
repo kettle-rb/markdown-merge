@@ -20,13 +20,7 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Added
 
-- More tests
-
 ### Changed
-
-- Documentation cleanup
-- Upgrade to [ast-merge v4.0.5](https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.5)
-- Upgrade to [tree_haver v5.0.3](https://github.com/kettle-rb/tree_haver/releases/tag/v5.0.3)
 
 ### Deprecated
 
@@ -35,6 +29,23 @@ Please file a bug if you notice a violation of semantic versioning.
 ### Fixed
 
 ### Security
+
+## [1.0.2] - 2026-02-01
+
+- TAG: [v1.0.2][1.0.2t]
+- COVERAGE: 93.12% -- 1611/1730 lines in 25 files
+- BRANCH COVERAGE: 81.52% -- 525/644 branches in 25 files
+- 96.92% documented
+
+### Added
+
+- More tests
+
+### Changed
+
+- Documentation cleanup
+- Upgrade to [ast-merge v4.0.5](https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.5)
+- Upgrade to [tree_haver v5.0.3](https://github.com/kettle-rb/tree_haver/releases/tag/v5.0.3)
 
 ## [1.0.1] - 2026-01-20
 
@@ -263,7 +274,9 @@ Please file a bug if you notice a violation of semantic versioning.
   This fixes freeze block detection for Commonmarker where the TreeHaver wrapper's
   content methods return empty but the inner node has the actual content.
 
-[Unreleased]: https://github.com/kettle-rb/markdown-merge/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/kettle-rb/markdown-merge/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/kettle-rb/markdown-merge/compare/v1.0.1...v1.0.2
+[1.0.2t]: https://github.com/kettle-rb/markdown-merge/releases/tag/v1.0.2
 [1.0.1]: https://github.com/kettle-rb/markdown-merge/compare/v1.0.0...v1.0.1
 [1.0.1t]: https://github.com/kettle-rb/markdown-merge/releases/tag/v1.0.1
 [1.0.0]: https://github.com/kettle-rb/markdown-merge/compare/76f2230840b236dd10fdd7baf322c082762dddb0...v1.0.0

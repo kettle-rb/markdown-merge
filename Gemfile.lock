@@ -67,7 +67,7 @@ GIT
 PATH
   remote: .
   specs:
-    markdown-merge (1.0.1)
+    markdown-merge (1.0.2)
       ast-merge (~> 4.0, >= 4.0.5)
       parslet (~> 2.0)
       tree_haver (~> 5.0, >= 5.0.3)
