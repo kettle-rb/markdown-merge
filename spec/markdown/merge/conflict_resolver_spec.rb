@@ -12,7 +12,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
           preference: preference,
           template_analysis: template_analysis,
           dest_analysis: dest_analysis,
-          **opts
+          **opts,
         )
       }
     end
@@ -29,7 +29,7 @@ RSpec.describe Markdown::Merge::ConflictResolver do
           preference: preference,
           template_analysis: template_analysis,
           dest_analysis: dest_analysis,
-          **opts
+          **opts,
         )
       }
     end

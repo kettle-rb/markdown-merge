@@ -16,7 +16,7 @@ Ast::Merge::RSpec::MergeGemRegistry.register_known_gems(
   :json_merge,
   :toml_merge,
   :prism_merge,
-  :psych_merge
+  :psych_merge,
 )
 
 # Now load the RSpec configuration (which will see the registered gems)
