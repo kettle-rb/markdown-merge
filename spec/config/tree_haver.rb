@@ -12,7 +12,11 @@ require "ast/merge/rspec/setup"
 # even when those gems aren't loaded
 Ast::Merge::RSpec::MergeGemRegistry.register_known_gems(
   :commonmarker_merge,
-  :markly_merge
+  :markly_merge,
+  :json_merge,
+  :toml_merge,
+  :prism_merge,
+  :psych_merge
 )
 
 # Now load the RSpec configuration (which will see the registered gems)
