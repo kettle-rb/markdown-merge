@@ -1,6 +1,43 @@
 # frozen_string_literal: true
 
+require "ast/merge/rspec/shared_examples"
+
 RSpec.describe Markdown::Merge::ConflictResolver do
+  it_behaves_like "Ast::Merge::ConflictResolverBase" do
+    let(:conflict_resolver_class) { described_class }
+    let(:strategy) { :node }
+    let(:build_conflict_resolver) do
+      ->(preference:, template_analysis:, dest_analysis:, **opts) {
+        described_class.new(
+          preference: preference,
+          template_analysis: template_analysis,
+          dest_analysis: dest_analysis,
+          **opts
+        )
+      }
+    end
+    let(:build_mock_analysis) do
+      -> { double("MockAnalysis") }
+    end
+  end
+
+  it_behaves_like "Ast::Merge::ConflictResolverBase node strategy" do
+    let(:conflict_resolver_class) { described_class }
+    let(:build_conflict_resolver) do
+      ->(preference:, template_analysis:, dest_analysis:, **opts) {
+        described_class.new(
+          preference: preference,
+          template_analysis: template_analysis,
+          dest_analysis: dest_analysis,
+          **opts
+        )
+      }
+    end
+    let(:build_mock_analysis) do
+      -> { double("MockAnalysis") }
+    end
+  end
+
   # Helper to create a properly stubbed mock node
   def create_mock_node(name, content: "content", frozen: false, reason: nil)
     node = double(name)
