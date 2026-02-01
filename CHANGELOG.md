@@ -20,7 +20,12 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Added
 
+- More tests
+
 ### Changed
+
+- Upgrade to [ast-merge v4.0.5](https://github.com/kettle-rb/ast-merge/releases/tag/v4.0.5)
+- Upgrade to [tree_haver v5.0.3](https://github.com/kettle-rb/tree_haver/releases/tag/v5.0.3)
 
 ### Deprecated
 

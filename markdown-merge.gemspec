@@ -81,13 +81,18 @@ Gem::Specification.new do |spec|
   # Listed files are the relative paths from bindir above.
   spec.executables = []
 
-  # Shared merge infrastructure
-  spec.add_dependency("ast-merge", "~> 4.0", ">= 4.0.2")                # ruby >= 3.2.0
-
-  # Unified markdown parsing via tree_haver backends (Commonmarker, Markly)
-  spec.add_dependency("tree_haver", "~> 5.0", ">= 5.0.2")               # ruby >= 3.2.0
-
+  # Parser - tree_haver provides unified AST interfaces for tree-sitter, citrus, parslet & more
+  spec.add_dependency("tree_haver", "~> 5.0", ">= 5.0.3")               # ruby >= 3.2.0
   spec.add_dependency("parslet", "~> 2.0")                              # ruby >= 0
+  # NOTE: tree-sitter-bash parser must be installed separately via your package manager
+  #       e.g., `apt install libtree-sitter-bash-dev` or built from source
+  # A ruby interface for tree-sitter must also be installed.
+  # - ruby_tree_sitter (MRI only)
+  # - tree_stump (Rust on MRI; and maybe JRuby?)
+  # - ffi (MRI, JRuby, Truffleruby; utilizes tree_haver's ffi backend)
+
+  # Shared merge infrastructure
+  spec.add_dependency("ast-merge", "~> 4.0", ">= 4.0.5")                # ruby >= 3.2.0
 
   # Utilities
   spec.add_dependency("version_gem", "~> 1.1", ">= 1.1.9")              # ruby >= 2.2.0
