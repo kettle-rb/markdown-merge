@@ -60,7 +60,7 @@ jobs:
       - name: Install Root Appraisal
         run: bundle install
       - name: Appraisal for ${{ matrix.appraisal }}
-        run: bundle exec appraisal ${{ matrix.appraisal }} bundle
+        run: bundle exec appraisal ${{ matrix.appraisal }} install
       - name: Debug gem paths
         run: |
           echo "=== Working directory ==="
