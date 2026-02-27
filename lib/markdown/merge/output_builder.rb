@@ -30,12 +30,16 @@ module Markdown
         @preserve_formatting = preserve_formatting
         @auto_spacing = auto_spacing
         @last_node_type = nil  # Track previous node type for spacing decisions
+        @last_end_line = nil   # Track previous node's end line for adjacency detection
+        @last_analysis = nil   # Track previous node's analysis for same-source detection
       end
 
       # Add a node's source content
       #
       # Automatically inserts structural blank lines when transitioning between
       # certain node types (tables, headings, code blocks, etc.) if auto_spacing is enabled.
+      # Skips auto-spacing when nodes are adjacent in the same source — the original
+      # formatting is preserved by the source extraction.
       #
       # @param node [Object] Node to add (can be parser node, FreezeNode, LinkDefinitionNode, etc.)
       # @param analysis [FileAnalysisBase] Analysis for accessing source
@@ -46,16 +50,21 @@ module Markdown
         # Auto-spacing logic:
         # - Skip for gap_line and freeze_block (they handle their own spacing)
         # - Skip if last node was a gap_line (we already have spacing)
+        # - Skip if nodes are adjacent in the same source (original spacing is correct)
         # - Otherwise, check MarkdownStructure.needs_blank_between? which handles
         #   contiguous types (like link_definitions that shouldn't have blanks between them)
         unless [:gap_line, :freeze_block].include?(current_type) ||
             @last_node_type == :gap_line
           if @auto_spacing && @last_node_type && current_type
             if MarkdownStructure.needs_blank_between?(@last_node_type, current_type)
-              # Only add spacing if we don't already have adequate blank lines
-              # Check the last part to see if it already ends with blank line(s)
-              unless @parts.empty? || @parts.last&.end_with?("\n\n")
-                add_gap_line(count: 1)
+              # Skip auto-spacing when nodes are adjacent lines in the same source.
+              # The original source formatting is correct — no blank line was there.
+              unless same_source_adjacent?(node, analysis)
+                # Only add spacing if we don't already have adequate blank lines
+                # Check the last part to see if it already ends with blank line(s)
+                unless @parts.empty? || @parts.last&.end_with?("\n\n")
+                  add_gap_line(count: 1)
+                end
               end
             end
           end
@@ -66,6 +75,8 @@ module Markdown
           @parts << content
           # Update last node type (track all node types for proper spacing)
           @last_node_type = current_type
+          @last_end_line = node_end_line(node)
+          @last_analysis = analysis
         end
       end
 
@@ -111,6 +122,48 @@ module Markdown
       end
 
       private
+
+      # Check if the current node is adjacent (consecutive lines) to the previous
+      # node in the same source file. When true, the original source already has
+      # the correct inter-node spacing and auto-spacing should not add blank lines.
+      #
+      # @param node [Object] Current node being added
+      # @param analysis [FileAnalysisBase] Current node's analysis
+      # @return [Boolean] true if nodes are from the same source and adjacent
+      def same_source_adjacent?(node, analysis)
+        return false unless @last_end_line && @last_analysis
+        return false unless @last_analysis.equal?(analysis)
+
+        current_start = node_start_line(node)
+        return false unless current_start
+
+        # Adjacent: the current node starts on or immediately after the previous node ended
+        current_start <= @last_end_line + 1
+      end
+
+      # Extract start line from a node
+      #
+      # @param node [Object] Node to inspect
+      # @return [Integer, nil] 1-based start line
+      def node_start_line(node)
+        if node.respond_to?(:source_position)
+          node.source_position&.dig(:start_line)
+        elsif node.respond_to?(:start_line)
+          node.start_line
+        end
+      end
+
+      # Extract end line from a node
+      #
+      # @param node [Object] Node to inspect
+      # @return [Integer, nil] 1-based end line
+      def node_end_line(node)
+        if node.respond_to?(:source_position)
+          node.source_position&.dig(:end_line)
+        elsif node.respond_to?(:end_line)
+          node.end_line
+        end
+      end
 
       # Extract source content from a node
       #

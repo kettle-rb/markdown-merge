@@ -337,5 +337,112 @@ RSpec.describe Markdown::Merge::OutputBuilder do
         expect(result).to include("Source from 3 to 3")
       end
     end
+
+    describe "same-source adjacency" do
+      it "does not insert blank line between adjacent paragraph and list from same source" do
+        builder = described_class.new(auto_spacing: true)
+
+        paragraph_node = double("ParagraphNode")
+        allow(paragraph_node).to receive(:respond_to?).and_return(false)
+        allow(paragraph_node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(paragraph_node).to receive(:respond_to?).with(:merge_type).and_return(true)
+        allow(paragraph_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(paragraph_node).to receive_messages(
+          source_position: {start_line: 1, end_line: 1},
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
+
+        list_node = double("ListNode")
+        allow(list_node).to receive(:respond_to?).and_return(false)
+        allow(list_node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(list_node).to receive(:respond_to?).with(:merge_type).and_return(true)
+        allow(list_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(list_node).to receive_messages(
+          source_position: {start_line: 2, end_line: 4},
+          type: :list,
+          merge_type: :list,
+        )
+
+        builder.add_node_source(paragraph_node, analysis)
+        builder.add_node_source(list_node, analysis)
+
+        result = builder.to_s
+        # Should NOT have a blank line gap between them since they are adjacent in the same source
+        expect(result).to eq("Source from 1 to 1Source from 2 to 4")
+      end
+
+      it "inserts blank line between non-adjacent paragraph and list from same source" do
+        builder = described_class.new(auto_spacing: true)
+
+        paragraph_node = double("ParagraphNode")
+        allow(paragraph_node).to receive(:respond_to?).and_return(false)
+        allow(paragraph_node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(paragraph_node).to receive(:respond_to?).with(:merge_type).and_return(true)
+        allow(paragraph_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(paragraph_node).to receive_messages(
+          source_position: {start_line: 1, end_line: 1},
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
+
+        # List starts on line 5 (gap of 3 lines - not adjacent)
+        list_node = double("ListNode")
+        allow(list_node).to receive(:respond_to?).and_return(false)
+        allow(list_node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(list_node).to receive(:respond_to?).with(:merge_type).and_return(true)
+        allow(list_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(list_node).to receive_messages(
+          source_position: {start_line: 5, end_line: 7},
+          type: :list,
+          merge_type: :list,
+        )
+
+        builder.add_node_source(paragraph_node, analysis)
+        builder.add_node_source(list_node, analysis)
+
+        result = builder.to_s
+        # SHOULD have auto-spacing since they are not adjacent
+        expect(result).to include("\n")
+      end
+
+      it "inserts blank line between paragraph and list from different sources" do
+        builder = described_class.new(auto_spacing: true)
+        other_analysis = double("OtherAnalysis")
+        allow(other_analysis).to receive(:source_range) do |start_line, end_line|
+          "Other source #{start_line} to #{end_line}"
+        end
+
+        paragraph_node = double("ParagraphNode")
+        allow(paragraph_node).to receive(:respond_to?).and_return(false)
+        allow(paragraph_node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(paragraph_node).to receive(:respond_to?).with(:merge_type).and_return(true)
+        allow(paragraph_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(paragraph_node).to receive_messages(
+          source_position: {start_line: 1, end_line: 1},
+          type: :paragraph,
+          merge_type: :paragraph,
+        )
+
+        list_node = double("ListNode")
+        allow(list_node).to receive(:respond_to?).and_return(false)
+        allow(list_node).to receive(:respond_to?).with(:source_position).and_return(true)
+        allow(list_node).to receive(:respond_to?).with(:merge_type).and_return(true)
+        allow(list_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(list_node).to receive_messages(
+          source_position: {start_line: 2, end_line: 4},
+          type: :list,
+          merge_type: :list,
+        )
+
+        # Different analysis objects = different sources
+        builder.add_node_source(paragraph_node, analysis)
+        builder.add_node_source(list_node, other_analysis)
+
+        result = builder.to_s
+        # SHOULD have auto-spacing since they are from different sources
+        expect(result).to include("\n")
+      end
+    end
   end
 end

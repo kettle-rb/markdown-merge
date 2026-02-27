@@ -28,6 +28,15 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Fixed
 
+- Fix spurious blank line insertion between paragraph and list/code-block nodes.
+  `OutputBuilder` auto-spacing now detects when consecutive nodes are adjacent in
+  the same source file (same analysis object, consecutive line numbers) and skips
+  the structural blank line. This preserves tight paragraph→list formatting like
+  `**Label:**\n- item` without inserting an unwanted blank line between them.
+  Auto-spacing still fires correctly for cross-source transitions (e.g., template
+  node followed by destination node with no gap line between them).
+  Reported via kettle-jem self-test against 6 markdown files.
+
 ### Security
 
 ## [1.0.3] - 2026-02-19
