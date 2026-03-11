@@ -7,7 +7,7 @@
 #
 
 # AST parsing for advanced templating
-if ENV.fetch("KETTLE_RB_DEV", "false").casecmp?("true")
+unless ENV.fetch("KETTLE_RB_DEV", "false").casecmp("false").zero?
   # Markdown backends for markdown-merge
   platform :mri do
     gem "markly-merge", path: "../../../markly-merge"           # markly backend
