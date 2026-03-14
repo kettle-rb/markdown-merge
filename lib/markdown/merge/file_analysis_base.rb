@@ -468,6 +468,13 @@ module Markdown
             # Find the previous non-gap-line node (structural node)
             preceding = sorted_nodes[0...idx].reverse.find { |n| !n.is_a?(GapLineNode) }
             node.preceding_node = preceding
+            if preceding
+              node.preceding_signature = begin
+                compute_node_signature(preceding)
+              rescue StandardError
+                nil
+              end
+            end
           end
         end
 

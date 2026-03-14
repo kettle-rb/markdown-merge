@@ -126,6 +126,11 @@ module Markdown
       #   - `false` (default) - Disable inner-merge (use standard conflict resolution)
       #   - `CodeBlockMerger` instance - Use custom CodeBlockMerger
       #
+      # @param remove_template_missing_nodes [Boolean] Controls whether destination-only
+      #   structural nodes should be removed instead of preserved. Standalone HTML
+      #   comment-only fragments, freeze blocks, and link reference definitions remain
+      #   preserved when enabled.
+      #
       # @param freeze_token [String] Token to use for freeze block markers.
       #   Default: "markdown-merge"
       #   Looks for: <!-- markdown-merge:freeze --> / <!-- markdown-merge:unfreeze -->
@@ -151,6 +156,7 @@ module Markdown
         preference: :destination,
         add_template_only_nodes: false,
         inner_merge_code_blocks: self.class.default_inner_merge_code_blocks,
+        remove_template_missing_nodes: false,
         freeze_token: self.class.default_freeze_token,
         match_refiner: nil,
         node_typing: nil,
@@ -168,6 +174,7 @@ module Markdown
           preference: preference,
           add_template_only_nodes: add_template_only_nodes,
           inner_merge_code_blocks: inner_merge_code_blocks,
+          remove_template_missing_nodes: remove_template_missing_nodes,
           freeze_token: freeze_token,
           match_refiner: match_refiner,
           node_typing: node_typing,

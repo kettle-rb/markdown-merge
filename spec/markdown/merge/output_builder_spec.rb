@@ -229,6 +229,23 @@ RSpec.describe Markdown::Merge::OutputBuilder do
     end
   end
 
+  describe "#blank_line_terminated?" do
+    it "detects a blank-line separator across split content and gap parts" do
+      builder = described_class.new
+      builder.add_raw("Intro\n")
+      builder.add_gap_line
+
+      expect(builder.blank_line_terminated?).to be(true)
+    end
+
+    it "returns false when output ends with only a single newline" do
+      builder = described_class.new
+      builder.add_raw("Intro\n")
+
+      expect(builder.blank_line_terminated?).to be(false)
+    end
+  end
+
   describe "#clear" do
     it "removes all content" do
       builder = described_class.new

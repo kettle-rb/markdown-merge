@@ -185,6 +185,18 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       end
     end
 
+    context "with remove_template_missing_nodes option" do
+      it "defaults to false" do
+        merger = test_merger_class.new(template, dest)
+        expect(merger.instance_variable_get(:@remove_template_missing_nodes)).to be(false)
+      end
+
+      it "accepts true" do
+        merger = test_merger_class.new(template, dest, remove_template_missing_nodes: true)
+        expect(merger.instance_variable_get(:@remove_template_missing_nodes)).to be(true)
+      end
+    end
+
     context "with inner_merge_code_blocks option" do
       it "accepts true to create default merger" do
         merger = test_merger_class.new(template, dest, inner_merge_code_blocks: true)
@@ -266,6 +278,12 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
     it "returns non-empty content" do
       result = merger.merge
       expect(result).not_to be_empty
+    end
+
+    it "removes destination-only nodes when removal mode is enabled" do
+      removal_merger = test_merger_class.new(template, "# Heading\n\nParagraph two\n\nDestination-only", remove_template_missing_nodes: true)
+
+      expect(removal_merger.merge).not_to include("Destination-only")
     end
   end
 
@@ -547,10 +565,11 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
         allow(merger.dest_analysis).to receive(:source_range).and_return("dest content")
 
-        frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+        frozen_info, preserve_separator_gap = merger.send(:process_dest_only_to_builder, entry, builder, stats)
 
         expect(builder.to_s).to eq("dest content")
         expect(frozen_info).to be_nil # No frozen info
+        expect(preserve_separator_gap).to be(false)
       end
 
       it "includes frozen info for freeze nodes" do
@@ -571,12 +590,13 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
         builder = Markdown::Merge::OutputBuilder.new
 
-        frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+        frozen_info, preserve_separator_gap = merger.send(:process_dest_only_to_builder, entry, builder, stats)
 
         expect(frozen_info).to be_a(Hash)
         expect(frozen_info[:start_line]).to eq(5)
         expect(frozen_info[:end_line]).to eq(10)
         expect(frozen_info[:reason]).to eq("test reason")
+        expect(preserve_separator_gap).to be(false)
       end
     end
 
@@ -1120,13 +1140,14 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
       entry = {dest_node: freeze_node, signature: [:freeze_block]}
 
-      frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+      frozen_info, preserve_separator_gap = merger.send(:process_dest_only_to_builder, entry, builder, stats)
 
       expect(builder.to_s).not_to be_empty
       expect(frozen_info).to be_a(Hash)
       expect(frozen_info[:start_line]).to eq(2)
       expect(frozen_info[:end_line]).to eq(5)
       expect(frozen_info[:reason]).to eq("keep this section")
+      expect(preserve_separator_gap).to be(false)
     end
 
     it "handles regular nodes" do
@@ -1146,10 +1167,11 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
       entry = {dest_node: node, signature: [:paragraph]}
 
-      frozen_info = merger.send(:process_dest_only_to_builder, entry, builder, stats)
+      frozen_info, preserve_separator_gap = merger.send(:process_dest_only_to_builder, entry, builder, stats)
 
       expect(builder.to_s).not_to be_empty
       expect(frozen_info).to be_nil
+      expect(preserve_separator_gap).to be(false)
     end
   end
 

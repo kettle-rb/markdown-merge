@@ -144,17 +144,18 @@ module Markdown
         return super unless replace_mode?
 
         template_analysis = create_analysis(template)
-        preserved_comment_insertions = standalone_comment_insertions(create_analysis(section_content))
+        preserved_fragment_insertions = preserved_destination_insertions(
+          create_analysis(section_content),
+          template_analysis,
+        )
 
-        return [template, {mode: :replace}] if preserved_comment_insertions.empty?
-        return [template, {mode: :replace}] unless standalone_comment_insertions(template_analysis).empty?
+        return [template, {mode: :replace}] if preserved_fragment_insertions.empty?
+
+        preservation_stats = replace_mode_preservation_stats(preserved_fragment_insertions)
 
         [
-          render_template_with_comment_insertions(template_analysis, preserved_comment_insertions),
-          {
-            mode: :replace,
-            preserved_destination_comment_fragments: preserved_comment_insertions.values.sum(&:size),
-          },
+          render_template_with_preserved_insertions(template_analysis, preserved_fragment_insertions),
+          preservation_stats,
         ]
       end
 
@@ -340,22 +341,101 @@ module Markdown
 
       private
 
-      def standalone_comment_insertions(analysis)
+      def replace_mode_preservation_stats(insertions)
+        comment_count = 0
+        link_definition_count = 0
+
+        insertions.each_value do |fragments|
+          fragments.each do |fragment|
+            case fragment[:kind]
+            when :standalone_comment
+              comment_count += 1
+            when :link_definition
+              link_definition_count += 1
+            end
+          end
+        end
+
+        {
+          mode: :replace,
+          preserved_destination_comment_fragments: comment_count,
+          preserved_destination_link_definitions: link_definition_count,
+        }.reject { |_key, value| value == 0 }
+      end
+
+      def preserved_destination_insertions(destination_analysis, template_analysis)
         insertions = Hash.new { |hash, key| hash[key] = [] }
         structural_index = 0
+        pending_gap_count = 0
+        template_has_standalone_comments = template_analysis.statements.any? do |statement|
+          standalone_comment_statement?(statement, template_analysis)
+        end
+        template_link_definition_signatures = template_analysis.statements.each_with_object(Set.new) do |statement, signatures|
+          signatures << statement.signature if link_definition_statement?(statement)
+        end
 
-        analysis.statements.each do |statement|
-          if standalone_comment_statement?(statement, analysis)
-            insertions[structural_index] << node_to_text(statement, analysis).sub(/\n+\z/, "")
-          elsif structural_statement?(statement, analysis)
+        destination_analysis.statements.each do |statement|
+          if structural_statement?(statement, destination_analysis)
             structural_index += 1
+            pending_gap_count = 0
+          elsif gap_line_statement?(statement)
+            pending_gap_count += 1 if insertions[structural_index].any?
+          else
+            fragment = preserved_destination_fragment(
+              statement,
+              destination_analysis,
+              template_has_standalone_comments: template_has_standalone_comments,
+              template_link_definition_signatures: template_link_definition_signatures,
+            )
+            next unless fragment
+
+            if insertions[structural_index].any?
+              fragment[:separator] = preserved_fragment_separator(
+                gap_count: pending_gap_count,
+                previous_kind: insertions[structural_index].last.fetch(:kind),
+                current_kind: fragment.fetch(:kind),
+              )
+            end
+
+            insertions[structural_index] << fragment
+            pending_gap_count = 0
           end
         end
 
         insertions.reject { |_index, fragments| fragments.empty? }
       end
 
-      def render_template_with_comment_insertions(template_analysis, insertions)
+      def preserved_destination_fragment(
+        statement,
+        analysis,
+        template_has_standalone_comments:,
+        template_link_definition_signatures:
+      )
+        if standalone_comment_statement?(statement, analysis)
+          return if template_has_standalone_comments
+
+          {
+            kind: :standalone_comment,
+            text: node_to_text(statement, analysis).sub(/\n+\z/, ""),
+          }
+        elsif link_definition_statement?(statement)
+          return if template_link_definition_signatures.include?(statement.signature)
+
+          {
+            kind: :link_definition,
+            text: node_to_text(statement, analysis).sub(/\n+\z/, ""),
+          }
+        end
+      end
+
+      def preserved_fragment_separator(gap_count:, previous_kind:, current_kind:)
+        return "\n\n" if gap_count.positive?
+        return "\n" if previous_kind == :link_definition && current_kind == :link_definition
+
+        "\n\n"
+      end
+
+      def render_template_with_preserved_insertions(template_analysis, insertions)
         result = +""
         structural_index = 0
         statements = template_analysis.statements
@@ -366,7 +446,7 @@ module Markdown
 
           if gap_line_statement?(statement) && insertions.key?(structural_index) && next_structural_statement_after?(statements, index, template_analysis)
             index += 1 while index < statements.length && gap_line_statement?(statements[index])
-            result = append_comment_fragments(result, insertions.delete(structural_index))
+            result = append_preserved_fragments(result, insertions.delete(structural_index))
             next
           end
 
@@ -376,13 +456,13 @@ module Markdown
         end
 
         if insertions.key?(structural_index)
-          result = append_comment_fragments(result, insertions.delete(structural_index))
+          result = append_preserved_fragments(result, insertions.delete(structural_index))
         end
 
         result
       end
 
-      def append_comment_fragments(content, fragments)
+      def append_preserved_fragments(content, fragments)
         result = content.sub(/\n+\z/, "\n")
 
         unless result.empty?
@@ -393,10 +473,17 @@ module Markdown
           end
         end
 
-        result << fragments.join("\n\n")
+        result << render_preserved_fragment_block(fragments)
         result << "\n"
         result << "\n" unless result.end_with?("\n\n")
         result
+      end
+
+      def render_preserved_fragment_block(fragments)
+        fragments.each_with_object(+"").with_index do |(fragment, result), index|
+          result << fragment[:separator] if index.positive?
+          result << fragment.fetch(:text)
+        end
       end
 
       def next_structural_statement_after?(statements, start_index, analysis)
@@ -404,7 +491,9 @@ module Markdown
       end
 
       def structural_statement?(statement, analysis)
-        !gap_line_statement?(statement) && !standalone_comment_statement?(statement, analysis)
+        !gap_line_statement?(statement) &&
+          !standalone_comment_statement?(statement, analysis) &&
+          !link_definition_statement?(statement)
       end
 
       def gap_line_statement?(statement)
@@ -415,6 +504,10 @@ module Markdown
         return false unless statement.respond_to?(:merge_type) && statement.merge_type == :html_block
 
         node_to_text(statement, analysis).strip.match?(CommentTracker::STANDALONE_HTML_COMMENT_REGEX)
+      end
+
+      def link_definition_statement?(statement)
+        statement.is_a?(LinkDefinitionNode) || (statement.respond_to?(:merge_type) && statement.merge_type == :link_definition)
       end
 
       # Check if a type represents a heading node.

@@ -94,6 +94,13 @@ module Markdown
       #   - `false` (default) - Disable inner-merge (use standard conflict resolution)
       #   - `CodeBlockMerger` instance - Use custom CodeBlockMerger
       #
+      # @param remove_template_missing_nodes [Boolean] Controls whether to remove nodes that only
+      #   exist in destination when not present in template:
+      #   - `false` (default) - Preserve destination-only nodes
+      #   - `true` - Remove destination-only structural nodes while still preserving
+      #     freeze blocks, standalone HTML comment-only fragments, and parser-consumed
+      #     non-structural content such as link reference definitions
+      #
       # @param freeze_token [String] Token to use for freeze block markers.
       #   Default: "markdown-merge"
       #
@@ -139,6 +146,7 @@ module Markdown
         preference: :destination,
         add_template_only_nodes: false,
         inner_merge_code_blocks: false,
+        remove_template_missing_nodes: false,
         freeze_token: FileAnalysisBase::DEFAULT_FREEZE_TOKEN,
         match_refiner: nil,
         node_typing: nil,
@@ -148,6 +156,7 @@ module Markdown
       )
         @preference = preference
         @add_template_only_nodes = add_template_only_nodes
+        @remove_template_missing_nodes = remove_template_missing_nodes
         @match_refiner = match_refiner
         @node_typing = node_typing
         @normalize_whitespace = normalize_whitespace
@@ -321,16 +330,27 @@ module Markdown
         frozen_blocks = []
         conflicts = []
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
+        preserve_removed_separator_gap = false
+        link_ownership_context = removal_mode_link_ownership_context(alignment) if @remove_template_missing_nodes
 
-        alignment.each do |entry|
+        alignment.each_with_index do |entry, index|
           case entry[:type]
           when :match
+            preserve_removed_separator_gap = false
             frozen = process_match_to_builder(entry, builder, stats)
             frozen_blocks << frozen if frozen
           when :template_only
+            preserve_removed_separator_gap = false
             process_template_only_to_builder(entry, builder, stats)
           when :dest_only
-            frozen = process_dest_only_to_builder(entry, builder, stats)
+            frozen, preserve_removed_separator_gap = process_dest_only_to_builder(
+              entry,
+              builder,
+              stats,
+              preserve_separator_gap: preserve_removed_separator_gap,
+              remaining_entries: alignment[(index + 1)..] || [],
+              link_ownership_context: link_ownership_context,
+            )
             frozen_blocks << frozen if frozen
           end
         end
@@ -369,6 +389,14 @@ module Markdown
 
         case resolution[:source]
         when :template
+          preserved_link_definitions = preserved_destination_link_definitions_for_match(raw_template_node, raw_dest_node)
+          preserved_link_definitions.each do |link_definition|
+            builder.add_node_source(link_definition, @dest_analysis)
+          end
+          unless preserved_link_definitions.empty?
+            stats[:preserved_destination_link_definitions] ||= 0
+            stats[:preserved_destination_link_definitions] += preserved_link_definitions.length
+          end
           stats[:nodes_modified] += 1 if resolution[:decision] != :identical
           builder.add_node_source(raw_template_node, @template_analysis)
         when :destination
@@ -383,6 +411,38 @@ module Markdown
         end
 
         frozen_info
+      end
+
+      def preserved_destination_link_definitions_for_match(template_node, dest_node)
+        destination_link_definitions = consumed_link_definitions_within(dest_node, @dest_analysis)
+        return [] if destination_link_definitions.empty?
+
+        template_signatures = consumed_link_definitions_within(template_node, @template_analysis)
+          .map(&:signature)
+          .to_set
+
+        destination_link_definitions.reject { |link_definition| template_signatures.include?(link_definition.signature) }
+      end
+
+      def consumed_link_definitions_within(node, analysis)
+        return [] if skip_link_ownership_scanning_for_node?(node, analysis)
+
+        pos = node.source_position
+        start_line = pos&.dig(:start_line)
+        end_line = pos&.dig(:end_line)
+        return [] unless start_line && end_line
+
+        (start_line..end_line).filter_map do |line_number|
+          LinkDefinitionNode.parse(analysis.source_range(line_number, line_number), line_number: line_number)
+        end.then { |definitions| unique_link_definitions_by_signature(definitions) }
+      rescue StandardError => e
+        return [] if missing_source_position_protocol_error?(e)
+
+        raise
+      end
+
+      def missing_source_position_protocol_error?(error)
+        error.is_a?(NoMethodError) || error.class.name == "RSpec::Mocks::MockExpectationError"
       end
 
       # Apply node typing to a node if node_typing is configured.
@@ -536,7 +596,7 @@ module Markdown
       # @param builder [OutputBuilder] Output builder to add to
       # @param stats [Hash] Statistics hash to update
       # @return [Hash, nil] Frozen block info if applicable
-      def process_dest_only_to_builder(entry, builder, stats)
+      def process_dest_only_to_builder(entry, builder, stats, preserve_separator_gap: false, remaining_entries: [], link_ownership_context: nil)
         node = entry[:dest_node]
 
         frozen_info = nil
@@ -549,8 +609,234 @@ module Markdown
           }
         end
 
-        builder.add_node_source(node, @dest_analysis)
-        frozen_info
+        unless @remove_template_missing_nodes
+          builder.add_node_source(node, @dest_analysis)
+          return [frozen_info, false]
+        end
+
+        if preserve_removed_dest_only_node?(node)
+          if node.is_a?(LinkDefinitionNode)
+            return [frozen_info, false] unless preserve_removed_link_definition_node?(node, link_ownership_context)
+
+            link_ownership_context[:preserved] << node.signature if link_ownership_context
+          end
+
+          builder.add_node_source(node, @dest_analysis)
+          return [frozen_info, preserve_separator_gap_after_removed_node?(node, remaining_entries)]
+        end
+
+        if preserve_removed_separator_gap_line?(node)
+          return [frozen_info, false] if builder.empty? || builder.blank_line_terminated?
+
+          should_preserve_gap = preserve_separator_gap && separator_gap_needed_after_removed_node?(remaining_entries)
+          should_preserve_gap ||= leading_separator_gap_before_preserved_comment_needed?(remaining_entries)
+          return [frozen_info, false] unless should_preserve_gap
+
+          builder.add_node_source(node, @dest_analysis)
+          return [frozen_info, false]
+        end
+
+        if removable_destination_only_node?(node)
+          preserved_link_definitions = preserved_destination_link_definitions_for_removed_node(node, link_ownership_context)
+
+          if preserved_link_definitions.any?
+            builder.add_gap_line(count: 1) unless builder.empty? || builder.blank_line_terminated?
+
+            preserved_link_definitions.each do |link_definition|
+              builder.add_node_source(link_definition, @dest_analysis)
+              link_ownership_context[:preserved] << link_definition.signature if link_ownership_context
+            end
+
+            stats[:preserved_destination_link_definitions] ||= 0
+            stats[:preserved_destination_link_definitions] += preserved_link_definitions.length
+          end
+
+          stats[:nodes_removed] += 1
+          return [nil, preserve_separator_gap || separator_gap_needed_after_removed_node?(remaining_entries)]
+        end
+
+        [nil, preserve_separator_gap]
+      end
+
+      def preserve_removed_dest_only_node?(node)
+        return true if node.respond_to?(:freeze_node?) && node.freeze_node?
+        return true if node.is_a?(LinkDefinitionNode)
+        return true if node.is_a?(GapLineNode) && !node.blank?
+
+        standalone_html_comment_node?(node)
+      end
+
+      def preserve_separator_gap_after_removed_node?(node, remaining_entries = [])
+        standalone_html_comment_node?(node) && separator_gap_needed_after_removed_node?(remaining_entries)
+      end
+
+      def leading_separator_gap_before_preserved_comment_needed?(remaining_entries)
+        next_entry = remaining_entries.find do |entry|
+          entry[:type] != :dest_only || !preserve_removed_separator_gap_line?(entry[:dest_node])
+        end
+
+        next_entry && next_entry[:type] == :dest_only && standalone_html_comment_node?(next_entry[:dest_node])
+      end
+
+      def separator_gap_needed_after_removed_node?(remaining_entries)
+        remaining_entries.any? { |entry| entry_kept_after_removed_node?(entry) }
+      end
+
+      def entry_kept_after_removed_node?(entry)
+        case entry[:type]
+        when :match
+          true
+        when :template_only
+          should_add_template_only_node?(entry)
+        when :dest_only
+          node = entry[:dest_node]
+          (node.respond_to?(:freeze_node?) && node.freeze_node?) || preserve_removed_dest_only_node?(node)
+        else
+          false
+        end
+      end
+
+      def preserve_removed_separator_gap_line?(node)
+        node.is_a?(GapLineNode) && node.blank?
+      end
+
+      def removable_destination_only_node?(node)
+        !node.is_a?(GapLineNode) && !node.is_a?(LinkDefinitionNode)
+      end
+
+      def standalone_html_comment_node?(node, analysis = @dest_analysis)
+        return false unless node.respond_to?(:source_position)
+        return false unless analysis.respond_to?(:comment_tracker)
+        return false unless analysis.comment_tracker
+
+        pos = node.source_position
+        return false unless pos && pos[:start_line] && pos[:end_line]
+        return false unless pos[:start_line] == pos[:end_line]
+
+        !!analysis.comment_node_at(pos[:start_line])
+      end
+
+      def removal_mode_link_ownership_context(alignment)
+        needed = Set.new
+        available = Set.new
+
+        alignment.each do |entry|
+          kept_node, analysis = kept_node_for_link_ownership(entry)
+          next unless kept_node && analysis
+
+          link_reference_signatures_within(kept_node, analysis).each { |signature| needed << signature }
+          link_definition_signatures_within(kept_node, analysis).each { |signature| available << signature }
+        end
+
+        {needed: needed, available: available, preserved: Set.new}
+      end
+
+      def kept_node_for_link_ownership(entry)
+        case entry[:type]
+        when :match
+          template_node = apply_node_typing(entry[:template_node])
+          dest_node = apply_node_typing(entry[:dest_node])
+
+          resolution = @resolver.resolve(
+            template_node,
+            dest_node,
+            template_index: entry[:template_index],
+            dest_index: entry[:dest_index],
+          )
+
+          if resolution[:source] == :template
+            [Ast::Merge::NodeTyping.unwrap(template_node), @template_analysis]
+          else
+            [Ast::Merge::NodeTyping.unwrap(dest_node), @dest_analysis]
+          end
+        when :template_only
+          return unless should_add_template_only_node?(entry)
+
+          [Ast::Merge::NodeTyping.unwrap(entry[:template_node]), @template_analysis]
+        when :dest_only
+          node = entry[:dest_node]
+          return unless preserve_removed_dest_only_node?(node)
+          return if node.is_a?(LinkDefinitionNode)
+
+          [node, @dest_analysis]
+        end
+      end
+
+      def preserved_destination_link_definitions_for_removed_node(node, link_ownership_context)
+        return [] unless link_ownership_context
+
+        destination_link_definitions = consumed_link_definitions_within(node, @dest_analysis)
+        return [] if destination_link_definitions.empty?
+
+        needed_signatures = link_ownership_context.fetch(:needed)
+        available_signatures = link_ownership_context.fetch(:available)
+        preserved_signatures = link_ownership_context.fetch(:preserved)
+
+        destination_link_definitions.reject do |link_definition|
+          signature = link_definition.signature
+          !needed_signatures.include?(signature) ||
+            available_signatures.include?(signature) ||
+            preserved_signatures.include?(signature)
+        end
+      end
+
+      def preserve_removed_link_definition_node?(node, link_ownership_context)
+        return true unless link_ownership_context
+
+        signature = node.signature
+        !link_ownership_context.fetch(:available).include?(signature) &&
+          !link_ownership_context.fetch(:preserved).include?(signature)
+      end
+
+      def link_definition_signatures_within(node, analysis)
+        return Set.new if standalone_html_comment_node?(node, analysis)
+
+        if node.is_a?(LinkDefinitionNode)
+          Set[node.signature]
+        else
+          consumed_link_definitions_within(node, analysis).map(&:signature).to_set
+        end
+      end
+
+      def link_reference_signatures_within(node, analysis)
+        return Set.new if skip_link_ownership_scanning_for_node?(node, analysis)
+
+        source = node_to_source(node, analysis)
+        return Set.new if source.nil? || source.empty?
+
+        source.scan(/!?\[([^\]]+)\]\[([^\]]*)\]/).each_with_object(Set.new) do |(text_label, explicit_label), signatures|
+          label = explicit_label.to_s.empty? ? text_label : explicit_label
+          normalized_label = label.to_s.downcase
+          next if normalized_label.empty?
+
+          signatures << [:link_definition, normalized_label]
+        end
+      end
+
+      def skip_link_ownership_scanning_for_node?(node, analysis)
+        return true if node.is_a?(GapLineNode) || node.is_a?(LinkDefinitionNode)
+        return true if node.respond_to?(:freeze_node?) && node.freeze_node?
+        return true if standalone_html_comment_node?(node, analysis)
+
+        literal_link_ownership_context_node?(node)
+      end
+
+      def unique_link_definitions_by_signature(link_definitions)
+        seen = Set.new
+
+        link_definitions.each_with_object([]) do |link_definition, unique_definitions|
+          signature = link_definition.signature
+          next if seen.include?(signature)
+
+          seen << signature
+          unique_definitions << link_definition
+        end
+      end
+
+      def literal_link_ownership_context_node?(node)
+        return false unless node.respond_to?(:type)
+
+        %w[code_block html html_block custom_block].include?(node.type.to_s)
       end
 
       # Convert a node to its source text.

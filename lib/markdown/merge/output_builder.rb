@@ -62,7 +62,7 @@ module Markdown
               unless same_source_adjacent?(node, analysis)
                 # Only add spacing if we don't already have adequate blank lines
                 # Check the last part to see if it already ends with blank line(s)
-                unless @parts.empty? || @parts.last&.end_with?("\n\n")
+                unless @parts.empty? || blank_line_terminated?
                   add_gap_line(count: 1)
                 end
               end
@@ -114,6 +114,30 @@ module Markdown
       # @return [Boolean]
       def empty?
         @parts.empty?
+      end
+
+      # Check whether the current output already ends with a blank-line separator.
+      #
+      # This looks across part boundaries so a trailing blank line represented as
+      # separate content + gap parts still counts as an existing separator.
+      #
+      # @return [Boolean]
+      def blank_line_terminated?
+        trailing_newlines = 0
+
+        @parts.reverse_each do |part|
+          next if part.nil? || part.empty?
+
+          idx = part.length - 1
+          while idx >= 0 && part[idx] == "\n"
+            trailing_newlines += 1
+            idx -= 1
+          end
+
+          break if idx >= 0
+        end
+
+        trailing_newlines >= 2
       end
 
       # Clear all content

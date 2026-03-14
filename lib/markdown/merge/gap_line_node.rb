@@ -30,6 +30,9 @@ module Markdown
       # This is set after integration to avoid circular dependencies during creation
       attr_accessor :preceding_node
 
+      # @return [Array, nil] Signature of the preceding structural node when available
+      attr_accessor :preceding_signature
+
       # Initialize a new GapLineNode
       #
       # @param content [String] The line content (without trailing newline)
@@ -38,6 +41,7 @@ module Markdown
         @content = content.chomp
         @line_number = line_number
         @preceding_node = nil  # Set later during integration
+        @preceding_signature = nil
 
         location = Ast::Merge::AstNode::Location.new(
           start_line: line_number,
@@ -77,11 +81,13 @@ module Markdown
             # Offset from preceding node's end (e.g., heading ends on line 1, gap is line 2, offset = 1)
             offset = @line_number - preceding_end_line
 
-            # Use the preceding node's type as context (simpler than full signature)
-            # This works because gap lines after headings match gap lines after headings, etc.
-            preceding_type = @preceding_node.respond_to?(:type) ? @preceding_node.type : :unknown
+            context_signature = @preceding_signature || if @preceding_node.respond_to?(:type)
+              @preceding_node.type
+            else
+              :unknown
+            end
 
-            [:gap_line_after, preceding_type, offset, @content]
+            [:gap_line_after, context_signature, offset, @content]
           else
             # Fallback if we can't get position
             [:gap_line, @line_number, @content]

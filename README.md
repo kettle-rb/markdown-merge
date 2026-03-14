@@ -63,9 +63,21 @@ merger = Markdown::Merge::SmartMerger.new(template_content, dest_content, backen
     - `signature_generator` - callable custom signature generators
     - `preference` - setting of `:template`, `:destination`, or a Hash for per-node-type preferences
     - `add_template_only_nodes` - setting to retain sections that do not exist in destination
+      - `remove_template_missing_nodes` - remove top-level destination-only structural blocks in full-document smart merge while preserving standalone HTML comment-only fragments, link reference definitions, freeze blocks, and stable separator blank lines around preserved standalone fragments
     - `freeze_token` - customize freeze block markers (default: `"markdown-merge"`)
     - `inner_merge_code_blocks` - enable language-aware code block merging
     - `match_refiner` - fuzzy matching for unmatched nodes (e.g., `TableMatchRefiner`)
+
+### Removal Mode Scope
+
+`remove_template_missing_nodes: true` is intentionally conservative today for full-document Markdown smart merge:
+
+- removes **top-level destination-only structural blocks**
+- preserves **standalone HTML comment-only fragments**, **link reference definitions**, and **freeze blocks**
+- preserves **one separator blank line** when removed structural content collapses around a kept standalone HTML comment fragment
+- does **not** yet define generic inline-comment promotion or recursive/nested section-removal semantics
+
+Section-local `replace_mode` / partial-template behavior follows its own conservative Markdown rules and should not be assumed to have the same recursive removal contract as full-document smart merge.
 
 ### Supported Node Types
 
