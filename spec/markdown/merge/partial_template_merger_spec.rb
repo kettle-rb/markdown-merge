@@ -675,4 +675,141 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
       end
     end
   end
+
+  describe "replace_mode standalone HTML comments", :markdown_parsing do
+    it "preserves a destination standalone HTML comment-only fragment when replacing a section" do
+      template = <<~MARKDOWN
+        ## Description
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        # Title
+
+        ## Description
+
+        <!-- Destination docs -->
+
+        Destination paragraph.
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+
+      result = described_class.new(
+        template: template,
+        destination: destination,
+        anchor: {type: :heading, text: /Description/},
+        backend: :auto,
+        preference: :template,
+        replace_mode: true,
+      ).merge
+
+      expect(result.content).to eq(<<~MARKDOWN)
+        # Title
+
+        ## Description
+
+        <!-- Destination docs -->
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+    end
+
+    it "preserves a destination standalone HTML comment-only fragment between corresponding template blocks" do
+      template = <<~MARKDOWN
+        ## Description
+
+        Template intro.
+
+        Template body.
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        # Title
+
+        ## Description
+
+        Destination intro.
+
+        <!-- Destination docs -->
+
+        Destination body.
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+
+      result = described_class.new(
+        template: template,
+        destination: destination,
+        anchor: {type: :heading, text: /Description/},
+        backend: :auto,
+        preference: :template,
+        replace_mode: true,
+      ).merge
+
+      expect(result.content).to eq(<<~MARKDOWN)
+        # Title
+
+        ## Description
+
+        Template intro.
+
+        <!-- Destination docs -->
+
+        Template body.
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+    end
+
+    it "keeps the template standalone HTML comment-only fragment when the replacement already documents the section" do
+      template = <<~MARKDOWN
+        ## Description
+
+        <!-- Template docs -->
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        # Title
+
+        ## Description
+
+        <!-- Destination docs -->
+
+        Destination paragraph.
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+
+      result = described_class.new(
+        template: template,
+        destination: destination,
+        anchor: {type: :heading, text: /Description/},
+        backend: :auto,
+        preference: :template,
+        replace_mode: true,
+      ).merge
+
+      expect(result.content).to eq(<<~MARKDOWN)
+        # Title
+
+        ## Description
+
+        <!-- Template docs -->
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+    end
+  end
 end

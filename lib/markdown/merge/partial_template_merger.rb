@@ -33,6 +33,20 @@ module Markdown
       # Re-export Result class from base for convenience
       Result = Ast::Merge::PartialTemplateMergerBase::Result
 
+      class << self
+        def default_backend
+          :markly
+        end
+
+        def file_analysis_class
+          FileAnalysis
+        end
+
+        def smart_merger_class
+          SmartMerger
+        end
+      end
+
       # @return [Symbol] Backend to use (:markly, :commonmarker)
       attr_reader :backend
 
@@ -57,7 +71,7 @@ module Markdown
         destination:,
         anchor:,
         boundary: nil,
-        backend: :markly,
+        backend: self.class.default_backend,
         preference: :template,
         add_missing: true,
         when_missing: :skip,
@@ -126,12 +140,30 @@ module Markdown
 
       protected
 
+      def merge_section_content(section_content)
+        return super unless replace_mode?
+
+        template_analysis = create_analysis(template)
+        preserved_comment_insertions = standalone_comment_insertions(create_analysis(section_content))
+
+        return [template, {mode: :replace}] if preserved_comment_insertions.empty?
+        return [template, {mode: :replace}] unless standalone_comment_insertions(template_analysis).empty?
+
+        [
+          render_template_with_comment_insertions(template_analysis, preserved_comment_insertions),
+          {
+            mode: :replace,
+            preserved_destination_comment_fragments: preserved_comment_insertions.values.sum(&:size),
+          },
+        ]
+      end
+
       # Validate the backend parameter.
       #
       # @param backend [Symbol] The backend to validate
       # @raise [ArgumentError] If backend is not supported
       def validate_backend!(backend)
-        valid_backends = [:markly, :commonmarker]
+        valid_backends = [:auto, :markly, :commonmarker]
         return if valid_backends.include?(backend.to_sym)
 
         raise ArgumentError, "Unknown backend: #{backend}. Supported: #{valid_backends.join(", ")}"
@@ -142,7 +174,7 @@ module Markdown
       # @param content [String] The content to analyze
       # @return [FileAnalysis] A FileAnalysis instance
       def create_analysis(content)
-        FileAnalysis.new(content, backend: backend)
+        self.class.file_analysis_class.new(content, backend: backend)
       end
 
       # Create a SmartMerger for merging the section.
@@ -166,7 +198,7 @@ module Markdown
         options[:node_typing] = node_typing if node_typing
         options[:match_refiner] = match_refiner if match_refiner
 
-        SmartMerger.new(template_content, destination_content, **options)
+        self.class.smart_merger_class.new(template_content, destination_content, **options)
       end
 
       # Build a signature generator that uses type-based matching for tables.
@@ -307,6 +339,83 @@ module Markdown
       end
 
       private
+
+      def standalone_comment_insertions(analysis)
+        insertions = Hash.new { |hash, key| hash[key] = [] }
+        structural_index = 0
+
+        analysis.statements.each do |statement|
+          if standalone_comment_statement?(statement, analysis)
+            insertions[structural_index] << node_to_text(statement, analysis).sub(/\n+\z/, "")
+          elsif structural_statement?(statement, analysis)
+            structural_index += 1
+          end
+        end
+
+        insertions.reject { |_index, fragments| fragments.empty? }
+      end
+
+      def render_template_with_comment_insertions(template_analysis, insertions)
+        result = +""
+        structural_index = 0
+        statements = template_analysis.statements
+        index = 0
+
+        while index < statements.length
+          statement = statements[index]
+
+          if gap_line_statement?(statement) && insertions.key?(structural_index) && next_structural_statement_after?(statements, index, template_analysis)
+            index += 1 while index < statements.length && gap_line_statement?(statements[index])
+            result = append_comment_fragments(result, insertions.delete(structural_index))
+            next
+          end
+
+          result << node_to_text(statement, template_analysis)
+          structural_index += 1 if structural_statement?(statement, template_analysis)
+          index += 1
+        end
+
+        if insertions.key?(structural_index)
+          result = append_comment_fragments(result, insertions.delete(structural_index))
+        end
+
+        result
+      end
+
+      def append_comment_fragments(content, fragments)
+        result = content.sub(/\n+\z/, "\n")
+
+        unless result.empty?
+          if result.end_with?("\n")
+            result << "\n" unless result.end_with?("\n\n")
+          else
+            result << "\n\n"
+          end
+        end
+
+        result << fragments.join("\n\n")
+        result << "\n"
+        result << "\n" unless result.end_with?("\n\n")
+        result
+      end
+
+      def next_structural_statement_after?(statements, start_index, analysis)
+        statements[(start_index + 1)..]&.any? { |statement| structural_statement?(statement, analysis) }
+      end
+
+      def structural_statement?(statement, analysis)
+        !gap_line_statement?(statement) && !standalone_comment_statement?(statement, analysis)
+      end
+
+      def gap_line_statement?(statement)
+        statement.respond_to?(:merge_type) && statement.merge_type == :gap_line
+      end
+
+      def standalone_comment_statement?(statement, analysis)
+        return false unless statement.respond_to?(:merge_type) && statement.merge_type == :html_block
+
+        node_to_text(statement, analysis).strip.match?(CommentTracker::STANDALONE_HTML_COMMENT_REGEX)
+      end
 
       # Check if a type represents a heading node.
       #

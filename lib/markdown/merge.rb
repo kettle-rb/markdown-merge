@@ -101,6 +101,8 @@ module Markdown
 
     # Autoload all components - base classes
     autoload :Cleanse, "markdown/merge/cleanse"
+    autoload :CommentTracker, "markdown/merge/comment_tracker"
+    autoload :BackendSupport, "markdown/merge/backend_support"
     autoload :DebugLogger, "markdown/merge/debug_logger"
     autoload :FreezeNode, "markdown/merge/freeze_node"
     autoload :FileAnalysisBase, "markdown/merge/file_analysis_base"
@@ -114,6 +116,7 @@ module Markdown
     autoload :LinkDefinitionNode, "markdown/merge/link_definition_node"
     autoload :GapLineNode, "markdown/merge/gap_line_node"
     autoload :OutputBuilder, "markdown/merge/output_builder"
+    autoload :WrapperSupport, "markdown/merge/wrapper_support"
     autoload :LinkDefinitionFormatter, "markdown/merge/link_definition_formatter"
     autoload :MarkdownStructure, "markdown/merge/markdown_structure"
     autoload :DocumentProblems, "markdown/merge/document_problems"
@@ -126,6 +129,21 @@ module Markdown
     autoload :FileAnalysis, "markdown/merge/file_analysis"
     autoload :SmartMerger, "markdown/merge/smart_merger"
     autoload :PartialTemplateMerger, "markdown/merge/partial_template_merger"
+  end
+end
+
+# Optional Markdown backend adapters.
+# These are provided by sibling wrapper gems during development and by installed
+# backend gems when available. Load them lazily here so backend availability and
+# parser classes are registered before FileAnalysis resolves :auto.
+%w[
+  commonmarker/merge/backend
+  markly/merge/backend
+].each do |feature|
+  begin
+    require feature
+  rescue LoadError
+    nil
   end
 end
 

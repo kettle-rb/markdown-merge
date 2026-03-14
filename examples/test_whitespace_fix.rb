@@ -9,20 +9,28 @@
 # 3. Blank lines are preserved after link definition blocks
 # 4. Consecutive link definitions do NOT have blank lines between them
 #
-# Run from ast-merge directory:
-#   ruby vendor/markdown-merge/examples/test_whitespace_fix.rb
+# Run from the markdown-merge directory:
+#   ruby examples/test_whitespace_fix.rb
+
+WORKSPACE_ROOT = File.expand_path("../..", __dir__)
+ENV["KETTLE_RB_DEV"] = WORKSPACE_ROOT unless ENV.key?("KETTLE_RB_DEV")
 
 require "bundler/inline"
 
 gemfile do
   source "https://gem.coop"
+  require File.expand_path("nomono/lib/nomono/bundler", WORKSPACE_ROOT)
 
   gem "benchmark"
   gem "markly", "~> 0.12"
-  gem "markdown-merge", path: File.expand_path("..", __dir__)
-  gem "markly-merge", path: File.expand_path("../../markly-merge", __dir__)
-  gem "ast-merge", path: File.expand_path("../../..", __dir__)
-  gem "tree_haver", path: File.expand_path("../../tree_haver", __dir__)
+  eval_nomono_gems(
+    gems: %w[markdown-merge markly-merge ast-merge tree_haver],
+    prefix: "KETTLE_RB",
+    path_env: "KETTLE_RB_DEV",
+    vendored_gems_env: "VENDORED_GEMS",
+    vendor_gem_dir_env: "VENDOR_GEM_DIR",
+    debug_env: "KETTLE_DEV_DEBUG"
+  )
 end
 
 require "tree_haver"
@@ -162,4 +170,3 @@ else
 end
 
 puts "\nDone."
-

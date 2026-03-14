@@ -320,6 +320,73 @@ RSpec.describe Markdown::Merge::SmartMerger do
         # With :destination preference, the typo is preserved
         expect(result).to include("desciption")
       end
+
+      it "preserves a destination standalone HTML comment-only section when template content wins" do
+        template_with_comment_gap = <<~MARKDOWN
+          # Title
+
+          This is the canonical project description.
+        MARKDOWN
+
+        dest_with_comment_gap = <<~MARKDOWN
+          # Title
+
+          <!-- Destination docs -->
+
+          This is the canoncal project description.
+        MARKDOWN
+
+        refiner = Ast::Merge::ContentMatchRefiner.new(
+          threshold: 0.8,
+          node_types: [:paragraph],
+        )
+
+        merger = described_class.new(
+          template_with_comment_gap,
+          dest_with_comment_gap,
+          preference: :template,
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        expect(result).to include("<!-- Destination docs -->")
+        expect(result).to include("canonical project description")
+        expect(result).not_to include("canoncal project description")
+      end
+
+      it "keeps the template standalone HTML comment-only section when the template already documents the matched content" do
+        template_with_comment_gap = <<~MARKDOWN
+          # Title
+
+          <!-- Template docs -->
+
+          This is the canonical project description.
+        MARKDOWN
+
+        dest_with_comment_gap = <<~MARKDOWN
+          # Title
+
+          <!-- Destination docs -->
+
+          This is the canoncal project description.
+        MARKDOWN
+
+        refiner = Ast::Merge::ContentMatchRefiner.new(
+          threshold: 0.8,
+          node_types: [:paragraph],
+        )
+
+        merger = described_class.new(
+          template_with_comment_gap,
+          dest_with_comment_gap,
+          preference: :template,
+          match_refiner: refiner,
+        )
+        result = merger.merge
+
+        expect(result).to include("<!-- Template docs -->")
+        expect(result).not_to include("<!-- Destination docs -->")
+      end
     end
   end
 

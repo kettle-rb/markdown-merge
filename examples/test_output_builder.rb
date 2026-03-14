@@ -3,14 +3,27 @@
 
 # Test script for OutputBuilder functionality
 
+WORKSPACE_ROOT = File.expand_path("../..", __dir__)
+ENV["KETTLE_RB_DEV"] = WORKSPACE_ROOT unless ENV.key?("KETTLE_RB_DEV")
+
 require "bundler/inline"
 
 gemfile do
   source "https://gem.coop"
-  gem "markdown-merge", path: "/home/pboling/src/kettle-rb/ast-merge/vendor/markdown-merge"
-  gem "ast-merge", path: "/home/pboling/src/kettle-rb/ast-merge"
-  gem "tree_haver", path: "/home/pboling/src/kettle-rb/ast-merge/vendor/tree_haver"
+  require File.expand_path("nomono/lib/nomono/bundler", WORKSPACE_ROOT)
+
+  eval_nomono_gems(
+    gems: %w[markdown-merge ast-merge tree_haver],
+    prefix: "KETTLE_RB",
+    path_env: "KETTLE_RB_DEV",
+    vendored_gems_env: "VENDORED_GEMS",
+    vendor_gem_dir_env: "VENDOR_GEM_DIR",
+    debug_env: "KETTLE_DEV_DEBUG"
+  )
 end
+
+require "tree_haver"
+require "markdown-merge"
 
 puts "=" * 80
 puts "Testing OutputBuilder Functionality"
@@ -118,4 +131,3 @@ end
 puts "\n" + "=" * 80
 puts "All OutputBuilder tests completed!"
 puts "=" * 80
-

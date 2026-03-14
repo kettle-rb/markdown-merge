@@ -48,6 +48,9 @@ module Markdown
       # @return [Array] Parse errors if any
       attr_reader :errors
 
+      # @return [CommentTracker] Comment tracker for this file
+      attr_reader :comment_tracker
+
       # Note: :source is inherited from Ast::Merge::FileAnalyzable
 
       # Initialize file analysis
@@ -62,6 +65,7 @@ module Markdown
         # (that empty string represents the "line after the last newline" which doesn't exist)
         @lines = source.split("\n", -1)
         @lines.pop if @lines.last == "" && source.end_with?("\n")
+        @comment_tracker = CommentTracker.new(@lines)
 
         @freeze_token = freeze_token
         @signature_generator = signature_generator
@@ -108,6 +112,63 @@ module Markdown
       # @return [Boolean]
       def valid?
         @errors.empty? && !@document.nil?
+      end
+
+      # Get shared comment capability information for this analysis.
+      #
+      # @return [Object]
+      def comment_capability
+        @comment_capability ||= comment_tracker.augment(owners: []).capability
+      end
+
+      # Get all tracked comments converted to shared comment nodes.
+      #
+      # @return [Array]
+      def comment_nodes
+        comment_tracker.comment_nodes
+      end
+
+      # Get a shared comment node at a specific line.
+      #
+      # @param line_num [Integer] 1-based line number
+      # @return [Object, nil]
+      def comment_node_at(line_num)
+        comment_tracker.comment_node_at(line_num)
+      end
+
+      # Get comments in a line range converted to a shared comment region.
+      #
+      # @param range [Range] Range of 1-based line numbers
+      # @param kind [Symbol] Region kind
+      # @param full_line_only [Boolean] Whether to keep only full-line comments
+      # @return [Object]
+      def comment_region_for_range(range, kind:, full_line_only: false)
+        comment_tracker.comment_region_for_range(
+          range,
+          kind: kind,
+          full_line_only: full_line_only,
+        )
+      end
+
+      # Build a passive shared comment attachment for an owner.
+      #
+      # @param owner [Object] Structural owner for the attachment
+      # @param options [Hash] Additional metadata / lookup overrides
+      # @return [Object]
+      def comment_attachment_for(owner, **options)
+        comment_tracker.comment_attachment_for(owner, **options)
+      end
+
+      # Build a passive shared comment augmenter for this analysis.
+      #
+      # @param owners [Array, nil] Owners used for attachment inference
+      # @param options [Hash] Additional augmenter options
+      # @return [Object]
+      def comment_augmenter(owners: nil, **options)
+        comment_tracker.augment(
+          owners: owners || comment_augmenter_default_owners,
+          **options
+        )
       end
 
       # Get all statements (block nodes outside freeze blocks + FreezeNode instances)
@@ -286,6 +347,12 @@ module Markdown
       end
 
       private
+
+      def comment_augmenter_default_owners
+        @comment_augmenter_default_owners ||= @statements.select do |statement|
+          statement.respond_to?(:source_position) && statement.source_position
+        end
+      end
 
       # Extract all nodes and integrate freeze blocks
       # @return [Array<Object>] Integrated list of nodes and freeze blocks

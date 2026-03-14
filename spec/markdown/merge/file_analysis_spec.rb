@@ -83,6 +83,41 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
+  describe "shared comment capability", :markdown_parsing do
+    let(:commented_markdown) do
+      <<~MARKDOWN
+        <!-- preamble -->
+
+        # Title
+
+        <!-- between sections -->
+
+        Paragraph text.
+
+        <!-- postlude -->
+      MARKDOWN
+    end
+
+    it "exposes standalone HTML comments through shared comment node APIs" do
+      analysis = described_class.new(commented_markdown)
+
+      expect(analysis.comment_nodes.map(&:line_number)).to eq([1, 5, 9])
+      expect(analysis.comment_node_at(5)&.text).to include("between sections")
+    end
+
+    it "builds leading attachments and document boundary regions" do
+      analysis = described_class.new(commented_markdown)
+      owner = analysis.statements.find { |stmt| stmt.merge_type == :heading }
+
+      attachment = analysis.comment_attachment_for(owner)
+      expect(attachment.leading_region.nodes.map(&:line_number)).to eq([1])
+
+      augmenter = analysis.comment_augmenter(owners: analysis.statements)
+      expect(augmenter.preamble_region).to be_nil
+      expect(augmenter.postlude_region).to be_nil
+    end
+  end
+
   describe "#freeze_blocks", :markdown_parsing do
     it "detects freeze blocks" do
       analysis = described_class.new(markdown_with_freeze)

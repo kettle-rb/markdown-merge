@@ -14,10 +14,14 @@
 # markdown-merge: Base gem providing SmartMerger with CodeBlockMerger
 # *-merge gems: prism-merge, psych-merge, json-merge, toml-merge, bash-merge
 
+WORKSPACE_ROOT = File.expand_path("../..", __dir__)
+ENV["KETTLE_RB_DEV"] = WORKSPACE_ROOT unless ENV.key?("KETTLE_RB_DEV")
+
 require "bundler/inline"
 
 gemfile do
   source "https://gem.coop"
+  require File.expand_path("nomono/lib/nomono/bundler", WORKSPACE_ROOT)
 
   # stdlib gems
   gem "benchmark"
@@ -25,18 +29,24 @@ gemfile do
   # Parser
   gem "commonmarker", ">= 0.23"
 
-  # Load local gems for testing
-  gem "ast-merge", path: File.expand_path("../../..", __dir__)
-  gem "tree_haver", path: File.expand_path("../../tree_haver", __dir__)
-  gem "markdown-merge", path: File.expand_path("..", __dir__)
-  gem "commonmarker-merge", path: File.expand_path("../../commonmarker-merge", __dir__)
-
-  # Language-specific merge gems
-  gem "prism-merge", path: File.expand_path("../../prism-merge", __dir__)
-  gem "psych-merge", path: File.expand_path("../../psych-merge", __dir__)
-  gem "json-merge", path: File.expand_path("../../json-merge", __dir__)
-  gem "toml-merge", path: File.expand_path("../../toml-merge", __dir__)
-  gem "bash-merge", path: File.expand_path("../../bash-merge", __dir__)
+  eval_nomono_gems(
+    gems: %w[
+      ast-merge
+      tree_haver
+      markdown-merge
+      commonmarker-merge
+      prism-merge
+      psych-merge
+      json-merge
+      toml-merge
+      bash-merge
+    ],
+    prefix: "KETTLE_RB",
+    path_env: "KETTLE_RB_DEV",
+    vendored_gems_env: "VENDORED_GEMS",
+    vendor_gem_dir_env: "VENDOR_GEM_DIR",
+    debug_env: "KETTLE_DEV_DEBUG"
+  )
 end
 
 require "tree_haver"

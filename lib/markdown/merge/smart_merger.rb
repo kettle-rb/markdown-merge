@@ -59,6 +59,38 @@ module Markdown
     # @see FileAnalysis
     # @see SmartMergerBase
     class SmartMerger < SmartMergerBase
+      VALID_BACKENDS = %i[auto commonmarker markly].freeze
+
+      class << self
+        def default_backend
+          :auto
+        end
+
+        def default_freeze_token
+          FileAnalysis::DEFAULT_FREEZE_TOKEN
+        end
+
+        def default_inner_merge_code_blocks
+          false
+        end
+
+        def default_parser_options
+          {}
+        end
+
+        def file_analysis_class
+          FileAnalysis
+        end
+
+        def template_parse_error_class
+          TemplateParseError
+        end
+
+        def destination_parse_error_class
+          DestinationParseError
+        end
+      end
+
       # @return [Symbol] The backend being used (:commonmarker, :markly)
       attr_reader :backend
 
@@ -114,18 +146,20 @@ module Markdown
       def initialize(
         template_content,
         dest_content,
-        backend: :auto,
+        backend: self.class.default_backend,
         signature_generator: nil,
         preference: :destination,
         add_template_only_nodes: false,
-        inner_merge_code_blocks: false,
-        freeze_token: FileAnalysis::DEFAULT_FREEZE_TOKEN,
+        inner_merge_code_blocks: self.class.default_inner_merge_code_blocks,
+        freeze_token: self.class.default_freeze_token,
         match_refiner: nil,
         node_typing: nil,
         **parser_options
       )
+        validate_backend!(backend)
+
         @requested_backend = backend
-        @parser_options = parser_options
+        @parser_options = self.class.default_parser_options.merge(parser_options)
 
         super(
           template_content,
@@ -152,7 +186,7 @@ module Markdown
       # @param options [Hash] Analysis options
       # @return [FileAnalysis] File analysis instance
       def create_file_analysis(content, **opts)
-        FileAnalysis.new(
+        self.class.file_analysis_class.new(
           content,
           backend: opts[:backend] || @requested_backend,
           freeze_token: opts[:freeze_token],
@@ -165,14 +199,14 @@ module Markdown
       #
       # @return [Class] Markdown::Merge::TemplateParseError
       def template_parse_error_class
-        TemplateParseError
+        self.class.template_parse_error_class
       end
 
       # Returns the DestinationParseError class to use.
       #
       # @return [Class] Markdown::Merge::DestinationParseError
       def destination_parse_error_class
-        DestinationParseError
+        self.class.destination_parse_error_class
       end
 
       # Convert a node to its source text.
@@ -215,6 +249,15 @@ module Markdown
         else
           source
         end
+      end
+
+      private
+
+      def validate_backend!(backend)
+        normalized_backend = backend.respond_to?(:to_sym) ? backend.to_sym : backend
+        return if VALID_BACKENDS.include?(normalized_backend)
+
+        raise ArgumentError, "Unknown backend: #{backend}"
       end
     end
   end

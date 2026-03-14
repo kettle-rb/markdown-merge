@@ -9,10 +9,14 @@
 # markdown-merge: Base gem providing SmartMerger for template/destination merging
 # tree_haver: Multi-backend parser (using Markly for GFM)
 
+WORKSPACE_ROOT = File.expand_path("../..", __dir__)
+ENV["KETTLE_RB_DEV"] = WORKSPACE_ROOT unless ENV.key?("KETTLE_RB_DEV")
+
 require "bundler/inline"
 
 gemfile do
   source "https://gem.coop"
+  require File.expand_path("nomono/lib/nomono/bundler", WORKSPACE_ROOT)
 
   # stdlib gems
   gem "benchmark"
@@ -20,17 +24,14 @@ gemfile do
   # Parser
   gem "markly", "~> 0.12"
 
-  # Load markdown-merge from local path
-  gem "markdown-merge", path: File.expand_path("..", __dir__)
-
-  # Load markly-merge from local path
-  gem "markly-merge", path: File.expand_path("../../markly-merge", __dir__)
-
-  # AST merging framework
-  gem "ast-merge", path: File.expand_path("../../..", __dir__)
-
-  # Tree parsing
-  gem "tree_haver", path: File.expand_path("../../tree_haver", __dir__)
+  eval_nomono_gems(
+    gems: %w[markdown-merge markly-merge ast-merge tree_haver],
+    prefix: "KETTLE_RB",
+    path_env: "KETTLE_RB_DEV",
+    vendored_gems_env: "VENDORED_GEMS",
+    vendor_gem_dir_env: "VENDOR_GEM_DIR",
+    debug_env: "KETTLE_DEV_DEBUG"
+  )
 end
 
 require "tree_haver"

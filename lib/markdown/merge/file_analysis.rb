@@ -43,6 +43,24 @@ module Markdown
       # @return [String]
       DEFAULT_FREEZE_TOKEN = "markdown-merge"
 
+      class << self
+        def default_backend
+          :auto
+        end
+
+        def default_freeze_token
+          self::DEFAULT_FREEZE_TOKEN
+        end
+
+        def default_parser_options
+          {}
+        end
+
+        def default_freeze_node_class
+          Markdown::Merge::FreezeNode
+        end
+      end
+
       # @return [Symbol] The backend being used (:commonmarker, :markly)
       attr_reader :backend
 
@@ -60,13 +78,13 @@ module Markdown
       #   For markly: { flags: Markly::DEFAULT, extensions: [:table] }
       def initialize(
         source,
-        backend: :auto,
-        freeze_token: DEFAULT_FREEZE_TOKEN,
+        backend: self.class.default_backend,
+        freeze_token: self.class.default_freeze_token,
         signature_generator: nil,
         **parser_options
       )
         @requested_backend = backend
-        @parser_options = parser_options
+        @parser_options = self.class.default_parser_options.merge(parser_options)
 
         # Resolve and initialize the backend
         @backend = resolve_backend(backend)
@@ -116,7 +134,7 @@ module Markdown
       #
       # @return [Class] Markdown::Merge::FreezeNode
       def freeze_node_class
-        FreezeNode
+        self.class.default_freeze_node_class
       end
 
       # Check if value is a tree_haver node.

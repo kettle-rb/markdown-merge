@@ -270,7 +270,7 @@ RSpec.describe Markdown::Merge::FileAnalysis, "coverage", :markdown_parsing do
           type: :super_custom_type,
           source_position: {start_line: 1, end_line: 1},
         )
-        allow(mock_node).to receive(:respond_to?).with(:type).and_return(true)
+        allow(mock_node).to receive(:respond_to?).with(:typed_node?).and_return(false)
 
         # The signature should handle this gracefully
         sig = analysis.compute_parser_signature(mock_node)
