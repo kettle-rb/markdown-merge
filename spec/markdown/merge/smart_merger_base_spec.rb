@@ -1,6 +1,29 @@
 # frozen_string_literal: true
 
 RSpec.describe Markdown::Merge::SmartMergerBase do
+  TestCommonmarkNode = Struct.new(
+    :commonmark,
+    :node_type,
+    :source_position,
+    :freeze_flag,
+    :start_line,
+    :end_line,
+    :reason,
+    keyword_init: true,
+  ) do
+    def type
+      node_type
+    end
+
+    def freeze_node?
+      freeze_flag
+    end
+
+    def to_commonmark
+      commonmark
+    end
+  end
+
   # Mock Node class - defined first so it can be used by MockFileAnalysis
   let(:mock_node_class) do
     Class.new do
@@ -444,17 +467,12 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
     # Helper to create a properly stubbed mock node for conflict resolution
     def create_resolver_node(name, content: "content")
-      node = double(name)
-      allow(node).to receive(:is_a?).and_return(false)
-      allow(node).to receive_messages(
-        freeze_node?: false,
-        type: :paragraph,
+      TestCommonmarkNode.new(
+        commonmark: content,
+        node_type: :paragraph,
         source_position: {start_line: 1, end_line: 1},
-        to_commonmark: content,
+        freeze_flag: false,
       )
-      # Flexible respond_to? that handles all method checks
-      allow(node).to receive(:respond_to?) { |m, *| [:freeze_node?, :type, :source_position, :to_commonmark].include?(m) }
-      node
     end
 
     describe "#code_block_node?" do
@@ -1182,24 +1200,21 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       stats = {nodes_modified: 0}
       builder = Markdown::Merge::OutputBuilder.new
 
-      template_node = double("TemplateNode")
-      allow(template_node).to receive_messages(
+      template_node = TestCommonmarkNode.new(
+        commonmark: "# Template",
+        node_type: :heading,
         source_position: {start_line: 1, end_line: 1},
-        to_commonmark: "# Template",
-        type: :heading,
+        freeze_flag: false,
       )
       allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(template_node).and_return(false)
       allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(template_node).and_return(template_node)
 
-      dest_node = double("DestNode")
-      allow(dest_node).to receive_messages(
-        freeze_node?: false,
+      dest_node = TestCommonmarkNode.new(
+        commonmark: "# Dest",
+        node_type: :heading,
         source_position: {start_line: 1, end_line: 1},
-        to_commonmark: "# Dest",
-        type: :heading,
+        freeze_flag: false,
       )
-      allow(dest_node).to receive(:is_a?).and_return(false)
-      allow(dest_node).to receive(:respond_to?) { |m, *| [:freeze_node?, :source_position, :to_commonmark, :type].include?(m) }
       allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(dest_node).and_return(false)
       allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(dest_node).and_return(dest_node)
 
