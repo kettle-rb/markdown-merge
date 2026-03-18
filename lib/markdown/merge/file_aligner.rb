@@ -25,6 +25,7 @@ module Markdown
     # @see FileAnalysisBase
     # @see SmartMergerBase
     class FileAligner
+      include ::Ast::Merge::TrailingGroups::AlignmentSort
       # @return [FileAnalysisBase] Template file analysis
       attr_reader :template_analysis
 
@@ -147,20 +148,7 @@ module Markdown
         end
 
         # Sort by appearance order (destination order for matched/dest-only, then template-only)
-        alignment.sort_by! do |entry|
-          case entry[:type]
-          when :match
-            [0, entry[:dest_index]]
-          when :dest_only
-            [0, entry[:dest_index]]
-          when :template_only
-            [1, entry[:template_index]]
-          else
-            # :nocov: defensive - only :match, :dest_only, :template_only types are created
-            [2, 0] # Unknown types sort last
-            # :nocov:
-          end
-        end
+        sort_alignment_with_template_position(alignment, alignment.count { |e| e[:type] != :template_only })
 
         DebugLogger.debug("Alignment complete", {
           total: alignment.size,
@@ -173,6 +161,19 @@ module Markdown
       end
 
       private
+
+      # Override: 2-tuple keys for markdown — simpler than the default 4-tuple
+      def match_sort_key(entry)
+        [0, entry[:dest_index]]
+      end
+
+      def dest_only_sort_key(entry)
+        [0, entry[:dest_index]]
+      end
+
+      def template_only_sort_key(entry, _dest_size)
+        [1, entry[:template_index]]
+      end
 
       # Build a map from signatures to statement indices
       #
