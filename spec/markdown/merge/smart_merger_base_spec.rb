@@ -445,14 +445,15 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
     # Helper to create a properly stubbed mock node for conflict resolution
     def create_resolver_node(name, content: "content")
       node = double(name)
-      allow(node).to receive(:is_a?).with(Ast::Merge::FreezeNodeBase).and_return(false)
+      allow(node).to receive(:is_a?).and_return(false)
       allow(node).to receive_messages(
+        freeze_node?: false,
         type: :paragraph,
         source_position: {start_line: 1, end_line: 1},
         to_commonmark: content,
       )
       # Flexible respond_to? that handles all method checks
-      allow(node).to receive(:respond_to?) { |m, *| [:type, :source_position, :to_commonmark].include?(m) }
+      allow(node).to receive(:respond_to?) { |m, *| [:freeze_node?, :type, :source_position, :to_commonmark].include?(m) }
       node
     end
 
@@ -1192,11 +1193,13 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
       dest_node = double("DestNode")
       allow(dest_node).to receive_messages(
+        freeze_node?: false,
         source_position: {start_line: 1, end_line: 1},
         to_commonmark: "# Dest",
         type: :heading,
       )
-      allow(dest_node).to receive(:respond_to?).with(:freeze_node?).and_return(false)
+      allow(dest_node).to receive(:is_a?).and_return(false)
+      allow(dest_node).to receive(:respond_to?) { |m, *| [:freeze_node?, :source_position, :to_commonmark, :type].include?(m) }
       allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(dest_node).and_return(false)
       allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(dest_node).and_return(dest_node)
 
