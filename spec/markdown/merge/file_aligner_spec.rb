@@ -145,7 +145,6 @@ RSpec.describe Markdown::Merge::FileAligner do
         # Should have: 1 match, 2 dest_only, 1 template_only
         expect(result.size).to eq(4)
 
-        # Matches and dest_only should come first, then template_only
         types = result.map { |e| e[:type] }
         template_only_index = types.index(:template_only)
         dest_only_indices = types.each_index.select { |i| types[i] == :dest_only }
@@ -271,6 +270,13 @@ RSpec.describe Markdown::Merge::FileAligner do
         expect(types).to include(:template_only)
         expect(types.count(:match)).to eq(2)
         expect(types.count(:template_only)).to eq(1)
+
+        first_match_index = result.index { |entry| entry[:type] == :match && entry[:template_node] == template_nodes[0] }
+        template_only_index = result.index { |entry| entry[:type] == :template_only && entry[:template_node] == template_nodes[1] }
+        second_match_index = result.index { |entry| entry[:type] == :match && entry[:template_node] == template_nodes[2] }
+
+        expect(template_only_index).to be > first_match_index
+        expect(template_only_index).to be < second_match_index
       end
     end
   end

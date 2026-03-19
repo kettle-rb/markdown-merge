@@ -119,9 +119,15 @@ module Markdown
           end
         end
 
+        matched_entries_by_template_position = alignment
+          .select { |entry| entry[:type] == :match }
+          .sort_by { |entry| [entry[:template_index], entry[:dest_index]] }
+
         # Second pass: add template-only entries
         template_statements.each_with_index do |stmt, idx|
           next if matched_template.include?(idx)
+
+          _previous_match, next_match = surrounding_matched_entries(matched_entries_by_template_position, idx)
 
           alignment << {
             type: :template_only,
@@ -130,6 +136,8 @@ module Markdown
             signature: @template_analysis.signature_at(idx),
             template_node: stmt,
             dest_node: nil,
+            anchor_dest_index: next_match&.[](:dest_index),
+            anchor_position: next_match ? :before : :append,
           }
         end
 
@@ -164,15 +172,22 @@ module Markdown
 
       # Override: 2-tuple keys for markdown — simpler than the default 4-tuple
       def match_sort_key(entry)
-        [0, entry[:dest_index]]
+        [0, entry[:dest_index], 0, entry[:template_index] || 0]
       end
 
       def dest_only_sort_key(entry)
-        [0, entry[:dest_index]]
+        [0, entry[:dest_index], 1, 0]
       end
 
       def template_only_sort_key(entry, _dest_size)
-        [1, entry[:template_index]]
+        anchor_dest_index = entry[:anchor_dest_index]
+
+        case entry[:anchor_position]
+        when :before
+          [0, anchor_dest_index, -1, entry[:template_index]]
+        else
+          [1, entry[:template_index], 0, 0]
+        end
       end
 
       # Build a map from signatures to statement indices
@@ -191,6 +206,25 @@ module Markdown
         end
 
         map
+      end
+
+      def surrounding_matched_entries(matched_entries, template_index)
+        previous_match = nil
+        next_match = nil
+
+        matched_entries.each do |entry|
+          if entry[:template_index] < template_index
+            previous_match = entry
+            next
+          end
+
+          if entry[:template_index] > template_index
+            next_match = entry
+            break
+          end
+        end
+
+        [previous_match, next_match]
       end
     end
   end

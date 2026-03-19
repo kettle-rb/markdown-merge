@@ -119,6 +119,45 @@ RSpec.describe Markdown::Merge::SmartMerger do
       expect(result).to include("Custom Section")
     end
 
+    it "inserts template-only sections before the next matched section instead of appending them at EOF" do
+      template = <<~MARKDOWN
+        # Project Title
+
+        ## Intro
+
+        Intro content.
+
+        ## Added Section
+
+        Added content.
+
+        ## Kept Section
+
+        Kept content.
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        # Project Title
+
+        ## Intro
+
+        Intro content.
+
+        ## Kept Section
+
+        Kept content.
+      MARKDOWN
+
+      merger = described_class.new(
+        template,
+        destination,
+        preference: :template,
+        add_template_only_nodes: true,
+      )
+
+      expect(merger.merge).to eq(template)
+    end
+
     it "removes destination-only sections when removal mode is enabled" do
       merger = described_class.new(template_content, dest_content, remove_template_missing_nodes: true)
       result = merger.merge
