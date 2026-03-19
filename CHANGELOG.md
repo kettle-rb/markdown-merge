@@ -20,11 +20,12 @@ Please file a bug if you notice a violation of semantic versioning.
 
 ### Added
 
-- Documented the current full-document Markdown `remove_template_missing_nodes: true` contract in the README and planning docs: top-level destination-only structural blocks are removed conservatively while standalone HTML comment-only fragments, link reference definitions, and freeze blocks remain preserved.
+ - Documented the current full-document Markdown `remove_template_missing_nodes: true` contract in the README: top-level destination-only structural blocks are removed conservatively while standalone HTML comment-only fragments, link reference definitions, and freeze blocks remain preserved.
 - Documented the shared Markdown comment-ownership rollout across boundary ownership, matched-node fallback, partial-template `replace_mode`, full-document fuzzy smart-merger behavior, and thin-wrapper parity around standalone HTML comment regions.
 
 ### Changed
 
+- Adopted and documented the shared `Ast::Merge::Layout` contract as the Markdown-family source-of-truth for top-level block-gap ownership, with wrapper-parity shared layout compliance coverage
 - Clarified that preserved standalone HTML comment postlude/orphan fragments keep one separator blank line on the leading edge when removed structural content collapses around them, and that generic inline-comment promotion plus recursive/nested removal semantics remain intentionally deferred.
 - Clarified that removal-mode ownership documentation now includes the broader link-definition follow-up where kept template-only paragraphs may retain destination-owned consumed link reference definitions after the legacy destination block holding them is removed.
 - Adopted `Ast::Merge::TrailingGroups::AlignmentSort` for the shared family model of template-only Markdown block ordering instead of maintaining a repo-local alignment sorter
