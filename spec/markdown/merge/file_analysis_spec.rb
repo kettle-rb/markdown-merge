@@ -118,6 +118,50 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
+  describe "shared layout compliance", :markdown_parsing do
+    let(:layout_markdown) do
+      <<~MARKDOWN
+
+        # Title
+
+        Paragraph one.
+
+        ## Section
+
+        Paragraph two.
+
+      MARKDOWN
+    end
+
+    let(:analysis) { described_class.new(layout_markdown) }
+    let(:structural_owners) do
+      analysis.statements.reject do |statement|
+        statement.respond_to?(:merge_type) && statement.merge_type == :gap_line
+      end
+    end
+    let(:first_owner) { structural_owners.first }
+    let(:layout_attachment) { analysis.layout_attachment_for(first_owner) }
+    let(:layout_augmenter) { analysis.layout_augmenter(owners: structural_owners) }
+
+    it_behaves_like "Ast::Merge::Layout::Attachment" do
+      let(:expected_attachment_owner) { first_owner }
+      let(:expected_leading_gap_kind) { :preamble }
+      let(:expected_trailing_gap_kind) { :interstitial }
+      let(:expected_gap_ranges) { [1..1, 3..3] }
+      let(:expected_leading_controls_output) { true }
+      let(:expected_trailing_controls_output) { false }
+    end
+
+    it_behaves_like "Ast::Merge::Layout::Augmenter" do
+      let(:augmenter_owner) { first_owner }
+      let(:expected_preamble_range) { 1..1 }
+      let(:expected_postlude_range) { 9..9 }
+      let(:expected_interstitial_ranges) { [3..3, 5..5, 7..7] }
+      let(:expected_owner_leading_gap_kind) { :preamble }
+      let(:expected_owner_trailing_gap_kind) { :interstitial }
+    end
+  end
+
   describe "#freeze_blocks", :markdown_parsing do
     it "detects freeze blocks" do
       analysis = described_class.new(markdown_with_freeze)
