@@ -62,6 +62,7 @@ RSpec.describe "PartialTemplateMerger post-processing integration", :markdown_pa
       result = merger.merge
       # Result may have original whitespace patterns
       expect(result).to be_a(Markdown::Merge::PartialTemplateMerger::Result)
+      expect(result.content).to include("Description paragraph.\n\n\n## Features")
     end
   end
 
