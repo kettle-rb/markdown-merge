@@ -30,6 +30,8 @@ module Markdown
     #   )
     #
     class PartialTemplateMerger < Ast::Merge::PartialTemplateMergerBase
+      include PreservationSupport
+
       # Re-export Result class from base for convenience
       Result = Ast::Merge::PartialTemplateMergerBase::Result
 
@@ -140,13 +142,16 @@ module Markdown
 
       protected
 
-      def merge_section_content(section_content)
+      def merge_section_content(section_content, section_context: nil)
         return super unless replace_mode?
 
         template_analysis = create_analysis(template)
         preserved_fragment_insertions = preserved_destination_insertions(
           create_analysis(section_content),
           template_analysis,
+          source_remove_plan: section_context&.fetch(:source_remove_plan, nil),
+          destination_section_statements: section_context&.fetch(:section_statements, nil),
+          destination_section_analysis: section_context&.fetch(:analysis, nil),
         )
 
         return [template, {mode: :replace}] if preserved_fragment_insertions.empty?
@@ -307,7 +312,7 @@ module Markdown
       # @param node [Object] The node to convert
       # @param analysis [FileAnalysis, nil] The analysis object for source lookup
       # @return [String] The source text
-      def node_to_text(node, analysis = nil)
+      def node_to_source(node, analysis = nil)
         # Unwrap if needed
         inner = node
         while inner.respond_to?(:inner_node) && inner.inner_node != inner
@@ -339,6 +344,8 @@ module Markdown
         end
       end
 
+      alias_method :node_to_text, :node_to_source
+
       private
 
       def replace_mode_preservation_stats(insertions)
@@ -363,25 +370,49 @@ module Markdown
         }.reject { |_key, value| value == 0 }
       end
 
-      def preserved_destination_insertions(destination_analysis, template_analysis)
+      def preserved_destination_insertions(destination_analysis, template_analysis, source_remove_plan: nil, destination_section_statements: nil, destination_section_analysis: nil)
         insertions = Hash.new { |hash, key| hash[key] = [] }
-        structural_index = 0
-        pending_gap_count = 0
+        remove_plan_owned_comment_region_keys = if source_remove_plan
+          rebase_preserved_comment_keys(
+            remove_plan_preserved_comment_keys(source_remove_plan),
+            line_offset: source_remove_plan.remove_start_line - 1,
+          )
+        else
+          Set.new
+        end
         template_has_standalone_comments = template_analysis.statements.any? do |statement|
-          standalone_comment_statement?(statement, template_analysis)
+          standalone_comment_node?(statement, template_analysis)
         end
         template_link_definition_signatures = template_analysis.statements.each_with_object(Set.new) do |statement, signatures|
-          signatures << statement.signature if link_definition_statement?(statement)
+          signatures << statement.signature if link_definition_node?(statement)
         end
 
+        preserve_comment_insertions_from_remove_plan(
+          insertions,
+          source_remove_plan,
+          destination_section_statements,
+          destination_section_analysis || destination_analysis,
+          template_has_standalone_comments: template_has_standalone_comments,
+        )
+
+        structural_index = 0
+        pending_gap_count = 0
+
         destination_analysis.statements.each do |statement|
-          if structural_statement?(statement, destination_analysis)
+          if structural_preservation_statement?(statement, destination_analysis)
             structural_index += 1
             pending_gap_count = 0
-          elsif gap_line_statement?(statement)
+          elsif gap_line_node?(statement)
             pending_gap_count += 1 if insertions[structural_index].any?
           else
-            fragment = preserved_destination_fragment(
+            next if remove_plan_owns_comment_node?(
+              statement,
+              destination_analysis,
+              source_remove_plan,
+              preserved_comment_keys: remove_plan_owned_comment_region_keys,
+            )
+
+            fragment = preserved_fragment_for_node(
               statement,
               destination_analysis,
               template_has_standalone_comments: template_has_standalone_comments,
@@ -389,15 +420,7 @@ module Markdown
             )
             next unless fragment
 
-            if insertions[structural_index].any?
-              fragment[:separator] = preserved_fragment_separator(
-                gap_count: pending_gap_count,
-                previous_kind: insertions[structural_index].last.fetch(:kind),
-                current_kind: fragment.fetch(:kind),
-              )
-            end
-
-            insertions[structural_index] << fragment
+            append_preserved_fragment(insertions, structural_index, fragment, gap_count: pending_gap_count)
             pending_gap_count = 0
           end
         end
@@ -405,34 +428,51 @@ module Markdown
         insertions.reject { |_index, fragments| fragments.empty? }
       end
 
-      def preserved_destination_fragment(
-        statement,
-        analysis,
-        template_has_standalone_comments:,
-        template_link_definition_signatures:
-      )
-        if standalone_comment_statement?(statement, analysis)
-          return if template_has_standalone_comments
+      def preserve_comment_insertions_from_remove_plan(insertions, source_remove_plan, destination_section_statements, destination_section_analysis, template_has_standalone_comments:)
+        return if template_has_standalone_comments
+        return unless source_remove_plan && destination_section_statements && destination_section_analysis
 
-          {
-            kind: :standalone_comment,
-            text: node_to_text(statement, analysis).sub(/\n+\z/, ""),
-          }
-        elsif link_definition_statement?(statement)
-          return if template_link_definition_signatures.include?(statement.signature)
-
-          {
-            kind: :link_definition,
-            text: node_to_text(statement, analysis).sub(/\n+\z/, ""),
-          }
+        structural_index_by_owner, final_structural_index = structural_index_lookup(destination_section_statements, destination_section_analysis)
+        remove_plan_comment_insertion_specs(
+          source_remove_plan,
+          insertion_index_by_owner: structural_index_by_owner,
+          final_insertion_index: final_structural_index,
+        ).each do |spec|
+          append_preserved_fragment(
+            insertions,
+            spec.fetch(:insertion_index),
+            spec.fetch(:fragment),
+            gap_count: spec.fetch(:gap_count),
+          )
         end
       end
 
-      def preserved_fragment_separator(gap_count:, previous_kind:, current_kind:)
-        return "\n\n" if gap_count.positive?
-        return "\n" if previous_kind == :link_definition && current_kind == :link_definition
+      def structural_index_lookup(statements, analysis)
+        structural_index = 0
+        lookup = {}
 
-        "\n\n"
+        Array(statements).each do |statement|
+          owner = statement.respond_to?(:node) ? statement.node : statement
+          lookup[attachment_owner_key(owner)] = structural_index
+
+          next unless structural_preservation_statement?(statement, analysis)
+
+          structural_index += 1
+        end
+
+        [lookup, structural_index]
+      end
+
+      def append_preserved_fragment(insertions, structural_index, fragment, gap_count: 0)
+        if insertions[structural_index].any?
+          fragment[:separator] = preserved_fragment_separator(
+            gap_count: gap_count,
+            previous_kind: insertions[structural_index].last.fetch(:kind),
+            current_kind: fragment.fetch(:kind),
+          )
+        end
+
+        insertions[structural_index] << fragment
       end
 
       def render_template_with_preserved_insertions(template_analysis, insertions)
@@ -444,14 +484,14 @@ module Markdown
         while index < statements.length
           statement = statements[index]
 
-          if gap_line_statement?(statement) && insertions.key?(structural_index) && next_structural_statement_after?(statements, index, template_analysis)
-            index += 1 while index < statements.length && gap_line_statement?(statements[index])
+          if gap_line_node?(statement) && insertions.key?(structural_index) && next_structural_statement_after?(statements, index, template_analysis)
+            index += 1 while index < statements.length && gap_line_node?(statements[index])
             result = append_preserved_fragments(result, insertions.delete(structural_index))
             next
           end
 
-          result << node_to_text(statement, template_analysis)
-          structural_index += 1 if structural_statement?(statement, template_analysis)
+          result << node_to_source(statement, template_analysis)
+          structural_index += 1 if structural_preservation_statement?(statement, template_analysis)
           index += 1
         end
 
@@ -487,27 +527,7 @@ module Markdown
       end
 
       def next_structural_statement_after?(statements, start_index, analysis)
-        statements[(start_index + 1)..]&.any? { |statement| structural_statement?(statement, analysis) }
-      end
-
-      def structural_statement?(statement, analysis)
-        !gap_line_statement?(statement) &&
-          !standalone_comment_statement?(statement, analysis) &&
-          !link_definition_statement?(statement)
-      end
-
-      def gap_line_statement?(statement)
-        statement.respond_to?(:merge_type) && statement.merge_type == :gap_line
-      end
-
-      def standalone_comment_statement?(statement, analysis)
-        return false unless statement.respond_to?(:merge_type) && statement.merge_type == :html_block
-
-        node_to_text(statement, analysis).strip.match?(CommentTracker::STANDALONE_HTML_COMMENT_REGEX)
-      end
-
-      def link_definition_statement?(statement)
-        statement.is_a?(LinkDefinitionNode) || (statement.respond_to?(:merge_type) && statement.merge_type == :link_definition)
+        statements[(start_index + 1)..]&.any? { |statement| structural_preservation_statement?(statement, analysis) }
       end
 
       # Check if a type represents a heading node.

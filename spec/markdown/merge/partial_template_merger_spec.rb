@@ -335,7 +335,7 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
     end
   end
 
-  describe "#node_to_text" do
+  describe "#node_to_source" do
     let(:merger) do
       described_class.new(
         template: "t",
@@ -351,7 +351,7 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
       allow(node).to receive(:respond_to?).with(:to_commonmark).and_return(true)
       allow(node).to receive(:to_commonmark).and_return("Markdown output")
 
-      expect(merger.send(:node_to_text, node)).to eq("Markdown output")
+      expect(merger.send(:node_to_source, node)).to eq("Markdown output")
     end
 
     it "falls back to to_s if no to_commonmark" do
@@ -361,7 +361,7 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
       allow(node).to receive(:respond_to?).with(:to_s).and_return(true)
       allow(node).to receive(:to_s).and_return("String output")
 
-      expect(merger.send(:node_to_text, node)).to eq("String output")
+      expect(merger.send(:node_to_source, node)).to eq("String output")
     end
 
     it "unwraps nested inner_node" do
@@ -374,7 +374,7 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
       allow(outer).to receive(:respond_to?).with(:inner_node).and_return(true)
       allow(outer).to receive(:inner_node).and_return(inner)
 
-      expect(merger.send(:node_to_text, outer)).to eq("Inner content")
+      expect(merger.send(:node_to_source, outer)).to eq("Inner content")
     end
 
     it "returns empty string if nothing available" do
@@ -383,7 +383,7 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
       allow(node).to receive(:respond_to?).with(:to_commonmark).and_return(false)
       allow(node).to receive(:respond_to?).with(:to_s).and_return(false)
 
-      expect(merger.send(:node_to_text, node)).to eq("")
+      expect(merger.send(:node_to_source, node)).to eq("")
     end
   end
 
@@ -676,6 +676,52 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
     end
   end
 
+  describe "#preserved_destination_insertions" do
+    let(:merger) do
+      described_class.new(
+        template: "Template",
+        destination: "Destination",
+        anchor: {type: :heading},
+        backend: :markly,
+        replace_mode: true,
+      )
+    end
+
+    it "does not skip a standalone destination comment node merely because a source remove plan exists" do
+      comment_statement = double(
+        "CommentStatement",
+        merge_type: :html_block,
+        source_position: {start_line: 5, end_line: 5},
+      )
+      destination_analysis = double(
+        "DestinationAnalysis",
+        statements: [comment_statement],
+        comment_tracker: Object.new,
+        comment_node_at: :comment_node,
+      )
+      template_analysis = double("TemplateAnalysis", statements: [])
+      source_remove_plan = double(
+        "RemovePlan",
+        promoted_comment_regions: [],
+        trailing_boundary: nil,
+        removed_attachments: [],
+        remove_start_line: 4,
+        remove_end_line: 8,
+      )
+
+      allow(merger).to receive(:node_to_source).with(comment_statement, destination_analysis).and_return("<!-- docs -->\n")
+
+      expect(
+        merger.send(
+          :preserved_destination_insertions,
+          destination_analysis,
+          template_analysis,
+          source_remove_plan: source_remove_plan,
+        ),
+      ).to eq({0 => [{kind: :standalone_comment, text: "<!-- docs -->"}]})
+    end
+  end
+
   describe "replace_mode standalone HTML comments", :markdown_parsing do
     it "preserves a destination standalone HTML comment-only fragment when replacing a section" do
       template = <<~MARKDOWN
@@ -810,6 +856,55 @@ RSpec.describe Markdown::Merge::PartialTemplateMerger do
 
         Keep me.
       MARKDOWN
+    end
+
+    it "preserves a destination standalone HTML comment-only fragment at the end of the replaced section" do
+      template = <<~MARKDOWN
+        ## Description
+
+        Template intro.
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        # Title
+
+        ## Description
+
+        Destination intro.
+
+        <!-- Destination trailing docs -->
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+
+      result = described_class.new(
+        template: template,
+        destination: destination,
+        anchor: {type: :heading, text: /Description/},
+        backend: :auto,
+        preference: :template,
+        replace_mode: true,
+      ).merge
+
+      expect(result.content).to eq(<<~MARKDOWN)
+        # Title
+
+        ## Description
+
+        Template intro.
+
+        <!-- Destination trailing docs -->
+
+        ## After
+
+        Keep me.
+      MARKDOWN
+      expect(result.stats).to include(
+        mode: :replace,
+        preserved_destination_comment_fragments: 1,
+      )
     end
   end
 end

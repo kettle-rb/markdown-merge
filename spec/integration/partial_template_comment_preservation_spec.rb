@@ -83,6 +83,64 @@ RSpec.describe "PartialTemplateMerger standalone HTML comment fixture", :markdow
     )
   end
 
+  it "preserves a trailing standalone HTML comment plus trailing destination-only link reference definitions during replace_mode section replacement" do
+    template = <<~MARKDOWN
+      ## Description
+
+      Template body with [Docs][docs] and [API][api].
+    MARKDOWN
+
+    destination = <<~MARKDOWN
+      # Title
+
+      ## Description
+
+      Destination body.
+
+      <!-- Destination trailing docs -->
+
+      [docs]: https://example.test/docs
+      [api]: https://example.test/api
+
+      ## After
+
+      Keep me.
+    MARKDOWN
+
+    expected = <<~MARKDOWN
+      # Title
+
+      ## Description
+
+      Template body with [Docs][docs] and [API][api].
+
+      <!-- Destination trailing docs -->
+
+      [docs]: https://example.test/docs
+      [api]: https://example.test/api
+
+      ## After
+
+      Keep me.
+    MARKDOWN
+
+    result = Markdown::Merge::PartialTemplateMerger.new(
+      template: template,
+      destination: destination,
+      anchor: {type: :heading, text: /Description/},
+      backend: :auto,
+      preference: :template,
+      replace_mode: true,
+    ).merge
+
+    expect(result.content).to eq(expected)
+    expect(result.stats).to include(
+      mode: :replace,
+      preserved_destination_comment_fragments: 1,
+      preserved_destination_link_definitions: 2,
+    )
+  end
+
   it "does not duplicate a destination link reference definition already provided by the template section" do
     template = <<~MARKDOWN
       ## Description

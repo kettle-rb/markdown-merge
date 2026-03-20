@@ -123,6 +123,7 @@ module Markdown
     autoload :WhitespaceNormalizer, "markdown/merge/whitespace_normalizer"
     autoload :LinkParser, "markdown/merge/link_parser"
     autoload :LinkReferenceRehydrator, "markdown/merge/link_reference_rehydrator"
+    autoload :PreservationSupport, "markdown/merge/preservation_support"
 
     # Autoload concrete implementations (tree_haver-based)
     autoload :NodeTypeNormalizer, "markdown/merge/node_type_normalizer"
@@ -140,11 +141,9 @@ end
   commonmarker/merge/backend
   markly/merge/backend
 ].each do |feature|
-  begin
-    require feature
-  rescue LoadError
-    nil
-  end
+  require feature
+rescue LoadError
+  nil
 end
 
 # Register with ast-merge's MergeGemRegistry for RSpec dependency tags

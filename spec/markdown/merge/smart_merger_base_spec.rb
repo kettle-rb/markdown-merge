@@ -1,26 +1,28 @@
 # frozen_string_literal: true
 
 RSpec.describe Markdown::Merge::SmartMergerBase do
-  TestCommonmarkNode = Struct.new(
-    :commonmark,
-    :node_type,
-    :source_position,
-    :freeze_flag,
-    :start_line,
-    :end_line,
-    :reason,
-    keyword_init: true,
-  ) do
-    def type
-      node_type
-    end
+  let(:test_commonmark_node_class) do
+    Struct.new(
+      :commonmark,
+      :node_type,
+      :source_position,
+      :freeze_flag,
+      :start_line,
+      :end_line,
+      :reason,
+      keyword_init: true,
+    ) do
+      def type
+        node_type
+      end
 
-    def freeze_node?
-      freeze_flag
-    end
+      def freeze_node?
+        freeze_flag
+      end
 
-    def to_commonmark
-      commonmark
+      def to_commonmark
+        commonmark
+      end
     end
   end
 
@@ -467,12 +469,158 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
 
     # Helper to create a properly stubbed mock node for conflict resolution
     def create_resolver_node(name, content: "content")
-      TestCommonmarkNode.new(
+      test_commonmark_node_class.new(
         commonmark: content,
         node_type: :paragraph,
         source_position: {start_line: 1, end_line: 1},
         freeze_flag: false,
       )
+    end
+
+    describe "#removal_comment_ownership_for_run" do
+      let(:ownership_merger_class) do
+        Class.new(test_merger_class) do
+          attr_writer :test_remove_plan, :test_owned_comment_region_keys, :test_owned_comment_node_keys
+
+          private
+
+          def removal_mode_remove_plan_for_entries(_entries)
+            @test_remove_plan
+          end
+
+          def remove_plan_preserved_comment_keys(_remove_plan)
+            @test_owned_comment_region_keys
+          end
+
+          def removal_mode_owned_comment_node_keys(_remove_plan, _run_entries)
+            @test_owned_comment_node_keys
+          end
+        end
+      end
+
+      let(:ownership_merger) { ownership_merger_class.new("# Test", "# Test") }
+      let(:remove_plan) { double("RemovePlan") }
+      let(:entries) { [{dest_node: Object.new}] }
+
+      before do
+        ownership_merger.test_remove_plan = remove_plan
+        ownership_merger.test_owned_comment_region_keys = Set[[9, 9, "<!-- shared docs -->"]]
+        ownership_merger.test_owned_comment_node_keys = Set[[10, 10, "<!-- shared docs -->"]]
+      end
+
+      it "returns the remove plan together with explicit ownership key sets" do
+        expect(ownership_merger.send(:removal_comment_ownership_for_run, entries)).to eq(
+          {
+            remove_plan: remove_plan,
+            owned_comment_region_keys: Set[[9, 9, "<!-- shared docs -->"]],
+            owned_comment_node_keys: Set[[10, 10, "<!-- shared docs -->"]],
+          },
+        )
+      end
+    end
+
+    describe "#removal_mode_remove_plan_for_entries" do
+      let(:destination) do
+        <<~MARKDOWN
+          Intro
+
+          Legacy body
+
+          Tail
+        MARKDOWN
+      end
+
+      let(:merger) { test_merger_class.new("Intro\n\nTail\n", destination) }
+
+      it "builds a shared remove plan for the contiguous destination-only run" do
+        node_class = Struct.new(:source_position, keyword_init: true)
+        before_statement = node_class.new(source_position: {start_line: 1, end_line: 1})
+        middle_statement = node_class.new(source_position: {start_line: 2, end_line: 2})
+        after_statement = node_class.new(source_position: {start_line: 3, end_line: 3})
+        analysis = instance_double(
+          Markdown::Merge::FileAnalysisBase,
+          source: destination,
+          comment_attachment_for: Ast::Merge::Comment::Attachment.new(owner: middle_statement),
+          layout_attachment_for: Ast::Merge::Layout::Attachment.new(owner: middle_statement),
+        )
+        merger.instance_variable_set(:@dest_analysis, analysis)
+        allow(merger).to receive(:preceding_boundary_statement).with(1).and_return(before_statement)
+        allow(merger).to receive(:following_boundary_statement).with(1).and_return(after_statement)
+
+        remove_plan = merger.send(
+          :removal_mode_remove_plan_for_entries,
+          [{dest_index: 1, dest_node: middle_statement}],
+        )
+
+        expect(remove_plan).to be_a(Ast::Merge::StructuralEdit::RemovePlan)
+        expect(remove_plan.remove_start_line).to eq(2)
+        expect(remove_plan.remove_end_line).to eq(2)
+        expect(remove_plan.leading_boundary.owner).to equal(before_statement)
+        expect(remove_plan.trailing_boundary.owner).to equal(after_statement)
+      end
+    end
+
+    describe "#preserved_removal_comment_node?" do
+      let(:region_class) { Struct.new(:start_line, :end_line, :text, keyword_init: true) }
+      let(:node_class) { Struct.new(:source_position, keyword_init: true) }
+      let(:inside_node) { node_class.new(source_position: {start_line: 10, end_line: 10}) }
+      let(:outside_node) { node_class.new(source_position: {start_line: 2, end_line: 2}) }
+      let(:analysis) do
+        Class.new do
+          attr_reader :comment_tracker
+
+          def initialize(regions:, source_ranges:)
+            @regions = regions
+            @source_ranges = source_ranges
+            @comment_tracker = Object.new
+          end
+
+          def comment_node_at(line_number)
+            return :comment_node if @regions.keys.any? { |(range, _, _)| range == (line_number..line_number) }
+
+            nil
+          end
+
+          def comment_region_for_range(range, kind:, full_line_only:)
+            @regions[[range, kind, full_line_only]]
+          end
+
+          def source_range(start_line, end_line)
+            @source_ranges[[start_line, end_line]]
+          end
+        end.new(
+          regions: {
+            [10..10, :orphan, true] => region_class.new(start_line: 10, end_line: 10, text: "<!-- shared docs -->"),
+            [2..2, :orphan, true] => region_class.new(start_line: 2, end_line: 2, text: "<!-- shared docs -->"),
+          },
+          source_ranges: {
+            [10, 10] => "<!-- shared docs -->\n",
+            [2, 2] => "<!-- shared docs -->\n",
+          },
+        )
+      end
+      let(:remove_plan) do
+        Struct.new(:remove_start_line, :remove_end_line, keyword_init: true).new(
+          remove_start_line: 10,
+          remove_end_line: 12,
+        )
+      end
+      let(:removal_comment_ownership) do
+        {
+          remove_plan: remove_plan,
+          owned_comment_region_keys: Set[[10, 10, "<!-- shared docs -->"]],
+          owned_comment_node_keys: Set[[10, 10, "<!-- shared docs -->"]],
+        }
+      end
+
+      before do
+        merger.instance_variable_set(:@dest_analysis, analysis)
+      end
+
+      it "preserves only the standalone comment node actually owned by the run's remove plan" do
+        expect(merger.send(:preserved_removal_comment_node?, inside_node, removal_comment_ownership)).to be(true)
+        expect(merger.send(:preserved_removal_comment_node?, outside_node, removal_comment_ownership)).to be(false)
+      end
     end
 
     describe "#code_block_node?" do
@@ -1200,7 +1348,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       stats = {nodes_modified: 0}
       builder = Markdown::Merge::OutputBuilder.new
 
-      template_node = TestCommonmarkNode.new(
+      template_node = test_commonmark_node_class.new(
         commonmark: "# Template",
         node_type: :heading,
         source_position: {start_line: 1, end_line: 1},
@@ -1209,7 +1357,7 @@ RSpec.describe Markdown::Merge::SmartMergerBase do
       allow(Ast::Merge::NodeTyping).to receive(:typed_node?).with(template_node).and_return(false)
       allow(Ast::Merge::NodeTyping).to receive(:unwrap).with(template_node).and_return(template_node)
 
-      dest_node = TestCommonmarkNode.new(
+      dest_node = test_commonmark_node_class.new(
         commonmark: "# Dest",
         node_type: :heading,
         source_position: {start_line: 1, end_line: 1},

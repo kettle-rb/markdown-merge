@@ -41,6 +41,8 @@ module Markdown
     # @see ConflictResolver
     # @see MergeResult
     class SmartMergerBase
+      include PreservationSupport
+
       # @return [FileAnalysisBase] Analysis of the template file
       attr_reader :template_analysis
 
@@ -332,6 +334,7 @@ module Markdown
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
         preserve_removed_separator_gap = false
         link_ownership_context = removal_mode_link_ownership_context(alignment) if @remove_template_missing_nodes
+        removal_comment_ownership = removal_mode_comment_ownership_context(alignment) if @remove_template_missing_nodes
 
         alignment.each_with_index do |entry, index|
           case entry[:type]
@@ -350,6 +353,7 @@ module Markdown
               preserve_separator_gap: preserve_removed_separator_gap,
               remaining_entries: alignment[(index + 1)..] || [],
               link_ownership_context: link_ownership_context,
+              removal_comment_ownership: removal_comment_ownership&.[](entry[:dest_index]),
             )
             frozen_blocks << frozen if frozen
           end
@@ -596,7 +600,7 @@ module Markdown
       # @param builder [OutputBuilder] Output builder to add to
       # @param stats [Hash] Statistics hash to update
       # @return [Hash, nil] Frozen block info if applicable
-      def process_dest_only_to_builder(entry, builder, stats, preserve_separator_gap: false, remaining_entries: [], link_ownership_context: nil)
+      def process_dest_only_to_builder(entry, builder, stats, preserve_separator_gap: false, remaining_entries: [], link_ownership_context: nil, removal_comment_ownership: nil)
         node = entry[:dest_node]
 
         frozen_info = nil
@@ -614,11 +618,16 @@ module Markdown
           return [frozen_info, false]
         end
 
-        if preserve_removed_dest_only_node?(node)
-          if node.is_a?(LinkDefinitionNode)
+        if preserve_removed_dest_only_node?(node, removal_comment_ownership)
+          if link_definition_node?(node)
             return [frozen_info, false] unless preserve_removed_link_definition_node?(node, link_ownership_context)
 
             link_ownership_context[:preserved] << node.signature if link_ownership_context
+          end
+
+          if standalone_comment_node?(node, @dest_analysis) && preserved_removal_comment_node?(node, removal_comment_ownership)
+            stats[:preserved_destination_comment_fragments] ||= 0
+            stats[:preserved_destination_comment_fragments] += 1
           end
 
           builder.add_node_source(node, @dest_analysis)
@@ -658,16 +667,34 @@ module Markdown
         [nil, preserve_separator_gap]
       end
 
-      def preserve_removed_dest_only_node?(node)
+      # Removal-mode node classification — Markdown-family local.
+      #
+      # These predicates live here rather than in PreservationSupport because their
+      # semantics are specific to full-document removal mode and would be meaningless
+      # or misleading in a shared preservation context:
+      #
+      # * preserve_removed_separator_gap_line? — named entry-point for removal mode;
+      #   delegates directly to PreservationSupport#blank_gap_line_node?.
+      #
+      # * removable_destination_only_node? — intentionally does NOT exclude standalone
+      #   comment nodes. Standalone comments ARE removable in removal mode unless they
+      #   are owned by a remove plan. This makes it distinct from
+      #   PreservationSupport#structural_preservation_statement?, which excludes all
+      #   three non-structural categories (gap lines, standalone comments, link defs).
+      #
+      # * boundary_owner_statement? — identifies any non-blank-gap-line statement as a
+      #   valid boundary anchor for remove-plan construction. This is a removal-mode
+      #   concept only; PartialTemplateMerger has no equivalent boundary-anchoring need.
+      def preserve_removed_dest_only_node?(node, removal_comment_ownership = nil)
         return true if node.respond_to?(:freeze_node?) && node.freeze_node?
-        return true if node.is_a?(LinkDefinitionNode)
-        return true if node.is_a?(GapLineNode) && !node.blank?
+        return true if link_definition_node?(node)
+        return true if non_blank_gap_line_node?(node)
 
-        standalone_html_comment_node?(node)
+        preserved_removal_comment_node?(node, removal_comment_ownership)
       end
 
       def preserve_separator_gap_after_removed_node?(node, remaining_entries = [])
-        standalone_html_comment_node?(node) && separator_gap_needed_after_removed_node?(remaining_entries)
+        standalone_comment_node?(node, @dest_analysis) && separator_gap_needed_after_removed_node?(remaining_entries)
       end
 
       def leading_separator_gap_before_preserved_comment_needed?(remaining_entries)
@@ -675,7 +702,7 @@ module Markdown
           entry[:type] != :dest_only || !preserve_removed_separator_gap_line?(entry[:dest_node])
         end
 
-        next_entry && next_entry[:type] == :dest_only && standalone_html_comment_node?(next_entry[:dest_node])
+        next_entry && next_entry[:type] == :dest_only && standalone_comment_node?(next_entry[:dest_node], @dest_analysis)
       end
 
       def separator_gap_needed_after_removed_node?(remaining_entries)
@@ -697,23 +724,11 @@ module Markdown
       end
 
       def preserve_removed_separator_gap_line?(node)
-        node.is_a?(GapLineNode) && node.blank?
+        blank_gap_line_node?(node)
       end
 
       def removable_destination_only_node?(node)
-        !node.is_a?(GapLineNode) && !node.is_a?(LinkDefinitionNode)
-      end
-
-      def standalone_html_comment_node?(node, analysis = @dest_analysis)
-        return false unless node.respond_to?(:source_position)
-        return false unless analysis.respond_to?(:comment_tracker)
-        return false unless analysis.comment_tracker
-
-        pos = node.source_position
-        return false unless pos && pos[:start_line] && pos[:end_line]
-        return false unless pos[:start_line] == pos[:end_line]
-
-        !!analysis.comment_node_at(pos[:start_line])
+        !gap_line_node?(node) && !link_definition_node?(node)
       end
 
       def removal_mode_link_ownership_context(alignment)
@@ -729,6 +744,118 @@ module Markdown
         end
 
         {needed: needed, available: available, preserved: Set.new}
+      end
+
+      def removal_mode_comment_ownership_context(alignment)
+        contexts = {}
+        run_entries = []
+
+        alignment.each do |entry|
+          if removal_mode_comment_run_entry?(entry)
+            run_entries << entry
+            next
+          end
+
+          merge_removal_comment_ownership_context!(contexts, run_entries)
+          run_entries = []
+        end
+
+        merge_removal_comment_ownership_context!(contexts, run_entries)
+        contexts
+      end
+
+      def merge_removal_comment_ownership_context!(contexts, run_entries)
+        ownership = removal_comment_ownership_for_run(run_entries)
+        return contexts unless ownership
+
+        Array(run_entries).each do |entry|
+          contexts[entry[:dest_index]] = ownership
+        end
+
+        contexts
+      end
+
+      def removal_comment_ownership_for_run(run_entries)
+        entries = Array(run_entries)
+        return if entries.empty?
+        return unless entries.any? { |entry| removal_mode_removable_structural_node?(entry[:dest_node]) }
+
+        remove_plan = removal_mode_remove_plan_for_entries(entries)
+        return unless remove_plan
+
+        {
+          remove_plan: remove_plan,
+          owned_comment_region_keys: remove_plan_preserved_comment_keys(remove_plan),
+          owned_comment_node_keys: removal_mode_owned_comment_node_keys(remove_plan, entries),
+        }.freeze
+      end
+
+      def removal_mode_comment_run_entry?(entry)
+        return false unless entry[:type] == :dest_only
+
+        node = entry[:dest_node]
+        preserve_removed_separator_gap_line?(node) ||
+          standalone_comment_node?(node, @dest_analysis) ||
+          removal_mode_removable_structural_node?(node)
+      end
+
+      def removal_mode_removable_structural_node?(node)
+        removable_destination_only_node?(node) && !preserve_removed_dest_only_node?(node)
+      end
+
+      def removal_mode_remove_plan_for_entries(entries)
+        first_entry = entries.first
+        last_entry = entries.last
+        return unless first_entry && last_entry
+
+        first_dest_index = first_entry[:dest_index]
+        last_dest_index = last_entry[:dest_index]
+        return if first_dest_index.nil? || last_dest_index.nil?
+
+        statements = entries.map { |entry| entry[:dest_node] }
+
+        leading_statement = preceding_boundary_statement(first_dest_index)
+        trailing_statement = following_boundary_statement(last_dest_index)
+
+        Ast::Merge::StructuralEdit::RemovePlanSupport.build_remove_plan(
+          analysis: @dest_analysis,
+          statements: statements,
+          leading_statement: leading_statement,
+          trailing_statement: trailing_statement,
+          source: :smart_merger_base_removal_mode,
+        )
+      end
+
+      def preceding_boundary_statement(dest_index)
+        @dest_analysis.statements[0...dest_index].reverse_each.find { |statement| boundary_owner_statement?(statement) }
+      end
+
+      def following_boundary_statement(dest_index)
+        Array(@dest_analysis.statements[(dest_index + 1)..]).find { |statement| boundary_owner_statement?(statement) }
+      end
+
+      def boundary_owner_statement?(statement)
+        statement && !preserve_removed_separator_gap_line?(statement)
+      end
+
+      def removal_mode_owned_comment_node_keys(remove_plan, run_entries)
+        remove_plan_preserved_comment_keys_for_nodes(
+          remove_plan,
+          nodes: Array(run_entries).map { |entry| entry[:dest_node] },
+          analysis: @dest_analysis,
+        )
+      end
+
+      def preserved_removal_comment_node?(node, removal_comment_ownership = nil)
+        return false unless standalone_comment_node?(node, @dest_analysis)
+        return true unless removal_comment_ownership
+
+        remove_plan_owns_comment_node?(
+          node,
+          @dest_analysis,
+          removal_comment_ownership.fetch(:remove_plan),
+          preserved_comment_keys: removal_comment_ownership.fetch(:owned_comment_region_keys),
+        ) || removal_comment_ownership.fetch(:owned_comment_node_keys).include?(preserved_comment_node_key(node, @dest_analysis))
       end
 
       def kept_node_for_link_ownership(entry)
@@ -756,7 +883,7 @@ module Markdown
         when :dest_only
           node = entry[:dest_node]
           return unless preserve_removed_dest_only_node?(node)
-          return if node.is_a?(LinkDefinitionNode)
+          return if link_definition_node?(node)
 
           [node, @dest_analysis]
         end
@@ -789,7 +916,7 @@ module Markdown
       end
 
       def link_definition_signatures_within(node, analysis)
-        return Set.new if standalone_html_comment_node?(node, analysis)
+        return Set.new if standalone_comment_node?(node, analysis)
 
         if node.is_a?(LinkDefinitionNode)
           Set[node.signature]
@@ -814,9 +941,9 @@ module Markdown
       end
 
       def skip_link_ownership_scanning_for_node?(node, analysis)
-        return true if node.is_a?(GapLineNode) || node.is_a?(LinkDefinitionNode)
+        return true if gap_line_node?(node) || link_definition_node?(node)
         return true if node.respond_to?(:freeze_node?) && node.freeze_node?
-        return true if standalone_html_comment_node?(node, analysis)
+        return true if standalone_comment_node?(node, analysis)
 
         literal_link_ownership_context_node?(node)
       end
@@ -838,6 +965,7 @@ module Markdown
 
         %w[code_block html html_block custom_block].include?(node.type.to_s)
       end
+
 
       # Convert a node to its source text.
       #
@@ -889,7 +1017,7 @@ module Markdown
         (gap_index + 1...statements.length).each do |i|
           node = statements[i]
           # If we find a non-gap-line node, this gap line is NOT document-trailing
-          unless node.is_a?(GapLineNode)
+          unless gap_line_node?(node)
             DebugLogger.debug("Found content after gap line", {
               next_node_index: i,
               next_node_type: node.class.name,

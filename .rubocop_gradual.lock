@@ -1,5 +1,11 @@
 {
-  "README.md:2780404668": [
-    [415, 7, 1, "Lint/Syntax: unexpected token tCOLON\n(Using Ruby 3.2 parser; configure using `TargetRubyVersion` parameter, under `AllCops`)", 177567]
+  "README.md:3293687286": [
+    [427, 7, 1, "Lint/Syntax: unexpected token tCOLON\n(Using Ruby 3.2 parser; configure using `TargetRubyVersion` parameter, under `AllCops`)", 177567]
+  ],
+  "gemfiles/modular/tree_sitter.gemfile:1239752395": [
+    [18, 1, 112, "Style/InvertibleUnlessCondition: Prefer `if ENV.fetch(\"KETTLE_RB_DEV\", \"false\").casecmp(\"false\").nonzero?` over `unless ENV.fetch(\"KETTLE_RB_DEV\", \"false\").casecmp(\"false\").zero?`.", 2718008714]
+  ],
+  "spec/markdown/merge/removal_mode_compliance_spec.rb:344807571": [
+    [6, 1, 62, "RSpec/SpecFilePathFormat: Spec path should end with `markdown/merge/smart_merger*_spec.rb`.", 1401119843]
   ]
 }

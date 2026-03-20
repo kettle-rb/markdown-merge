@@ -28,6 +28,7 @@ Please file a bug if you notice a violation of semantic versioning.
 - Adopted and documented the shared `Ast::Merge::Layout` contract as the Markdown-family source-of-truth for top-level block-gap ownership, with wrapper-parity shared layout compliance coverage
 - Clarified that preserved standalone HTML comment postlude/orphan fragments keep one separator blank line on the leading edge when removed structural content collapses around them, and that generic inline-comment promotion plus recursive/nested removal semantics remain intentionally deferred.
 - Clarified that removal-mode ownership documentation now includes the broader link-definition follow-up where kept template-only paragraphs may retain destination-owned consumed link reference definitions after the legacy destination block holding them is removed.
+- Rebased `Markdown::Merge::FileAligner` onto the shared `Ast::Merge::FileAlignerBase`, leaving Markdown-local template-only anchor placement, fuzzy refiner usage, debug logging, and alignment sort hooks in the Markdown layer
 - Adopted `Ast::Merge::TrailingGroups::AlignmentSort` for the shared family model of template-only Markdown block ordering instead of maintaining a repo-local alignment sorter
 
 ### Deprecated

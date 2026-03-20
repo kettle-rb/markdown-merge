@@ -167,7 +167,7 @@ module Markdown
       def comment_augmenter(owners: nil, **options)
         comment_tracker.augment(
           owners: owners || comment_augmenter_default_owners,
-          **options
+          **options,
         )
       end
 

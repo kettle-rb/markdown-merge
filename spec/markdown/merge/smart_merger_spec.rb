@@ -190,8 +190,9 @@ RSpec.describe Markdown::Merge::SmartMerger do
       MARKDOWN
 
       merger = described_class.new(template, destination, remove_template_missing_nodes: true)
+      result = merger.merge_result
 
-      expect(merger.merge).to eq(<<~MARKDOWN)
+      expect(result.content).to eq(<<~MARKDOWN)
         # Title
 
         <!-- Destination docs -->
@@ -200,6 +201,10 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
         Keep content.
       MARKDOWN
+      expect(result.stats).to include(
+        nodes_removed: 2,
+        preserved_destination_comment_fragments: 1,
+      )
     end
 
     it "preserves destination-only link reference definitions while removing destination-only structural blocks" do
@@ -298,6 +303,44 @@ RSpec.describe Markdown::Merge::SmartMerger do
         Intro
 
         <!-- orphan docs -->
+
+        Kept tail.
+      MARKDOWN
+    end
+
+    it "does not confuse same-text standalone comments outside the removed range with the comment owned by the removed run" do
+      template = <<~MARKDOWN
+        Intro
+
+        Kept middle.
+
+        Kept tail.
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        Intro
+
+        <!-- shared docs -->
+
+        Legacy content.
+
+        Kept middle.
+
+        <!-- shared docs -->
+
+        Kept tail.
+      MARKDOWN
+
+      merger = described_class.new(template, destination, remove_template_missing_nodes: true)
+
+      expect(merger.merge).to eq(<<~MARKDOWN)
+        Intro
+
+        <!-- shared docs -->
+
+        Kept middle.
+
+        <!-- shared docs -->
 
         Kept tail.
       MARKDOWN

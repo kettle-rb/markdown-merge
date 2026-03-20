@@ -48,6 +48,28 @@ merger = Markdown::Merge::SmartMerger.new(template_content, dest_content, backen
 - [commonmarker-merge][commonmarker-merge] - Uses Comrak (Rust) via Commonmarker
 - [markly-merge][markly-merge] - Uses libcmark-gfm (C) via Markly
 
+### Wrapper contract for parser-specific Markdown gems
+
+`markdown-merge` is the intended shared Markdown-family layer. Parser-specific wrapper gems should stay thin and use the tested wrapper/bootstrap surface instead of copying merge logic.
+
+For a future wrapper (for example, a `kramdown`-based gem), the expected split is:
+
+- **Keep in the wrapper gem**
+  - hard dependency on the parser/backend gem
+  - backend registration and backend-specific node adapter code
+  - wrapper defaults such as freeze token, parser options, and inner-merge defaults
+  - wrapper-specific error classes and require paths
+- **Reuse from `markdown-merge`**
+  - `SmartMerger`, `PartialTemplateMerger`, `FileAnalysis`, `FileAligner`, `ConflictResolver`, `MergeResult`, comment tracking, and freeze-node behavior
+  - `WrapperSupport.install!` / `configure_*!` for thin wrapper bootstrapping
+  - `BackendSupport` for backend adapter wiring
+- **Do not add to the wrapper by default**
+  - independent merge semantics
+  - wrapper-local comment attachment or layout logic
+  - duplicated file-alignment / conflict-resolution flows already covered by `markdown-merge`
+
+Current examples of this contract are `commonmarker-merge` and `markly-merge`, which both keep parser/backend concerns local while delegating merge behavior to `markdown-merge`.
+
 ### Key Features
 
 - **Multiple Backends**: Supports Commonmarker and Markly through tree\_haver's unified API
@@ -70,14 +92,14 @@ merger = Markdown::Merge::SmartMerger.new(template_content, dest_content, backen
 
 ### Removal Mode Scope
 
-`remove_template_missing_nodes: true` is intentionally conservative today for full-document Markdown smart merge:
+`remove_template_missing_nodes: true` is intentionally conservative for full-document Markdown smart merge:
 
 - removes **top-level destination-only structural blocks**
 - preserves **standalone HTML comment-only fragments**, **link reference definitions**, and **freeze blocks**
 - preserves **one separator blank line** when removed structural content collapses around a kept standalone HTML comment fragment
-- does **not** yet define generic inline-comment promotion or recursive/nested section-removal semantics
+- does **not** define generic inline-comment promotion or recursive/nested section-removal semantics
 
-Section-local `replace_mode` / partial-template behavior follows its own conservative Markdown rules and should not be assumed to have the same recursive removal contract as full-document smart merge.
+Section-local `replace_mode` / partial-template behavior follows its own conservative Markdown rules: it preserves standalone HTML comment-only fragments and destination-only link reference definitions inside the replaced section, and it should not be assumed to have the same recursive removal contract as full-document smart merge.
 
 ### Supported Node Types
 

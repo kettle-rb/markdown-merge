@@ -82,10 +82,10 @@ module Markdown
             offset = @line_number - preceding_end_line
 
             context_signature = @preceding_signature || if @preceding_node.respond_to?(:type)
-              @preceding_node.type
-            else
-              :unknown
-            end
+                                                          @preceding_node.type
+                                                        else
+                                                          :unknown
+                                                        end
 
             [:gap_line_after, context_signature, offset, @content]
           else

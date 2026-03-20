@@ -7,9 +7,7 @@
 #
 
 # AST parsing for advanced templating
-unless ENV.fetch("KETTLE_RB_DEV", "false").casecmp("false").zero?
-  eval_gemfile "templating_local.gemfile"
-else
+if ENV.fetch("KETTLE_RB_DEV", "false").casecmp("false").zero?
   # Not all of these are released yet, but eventually we will add integration specs to ensure future changes work with the family.
   # gem "bash-merge"      # dotenv code blocks
   # gem "dotenv-merge"    # dotenv code blocks
@@ -24,4 +22,6 @@ else
   # # platform :mri do
   # #   gem "markly-merge"    # markly markdown merging
   # # end
+else
+  eval_gemfile "templating_local.gemfile"
 end
