@@ -790,7 +790,7 @@ the [Pessimistic Version Constraint](http://guides.rubygems.org/patterns/#pessim
 For example:
 
 ```ruby
-spec.add_dependency("markdown-merge", "~> 1.0")
+spec.add_dependency("markdown-merge", "~> 2.0")
 ```
 
 <details markdown="1">
