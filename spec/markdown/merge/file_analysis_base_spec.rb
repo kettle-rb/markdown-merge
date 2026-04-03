@@ -201,7 +201,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
     let(:analysis) { test_class_full.new("# Test") }
 
     describe "with :heading/:header node type" do
-      it "returns heading signature" do
+      it "returns heading signature for H2+" do
         node = double("HeadingNode", type: :heading, header_level: 2)
         allow(node).to receive(:first_child).and_return(nil)
         allow(node).to receive(:walk).and_yield(double(type: :text, string_content: "Title"))
@@ -212,14 +212,22 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
         expect(result[2]).to eq("Title")
       end
 
-      it "handles :header type (alias)" do
+      it "returns singleton [:heading, 1] for H1 (no text), treating the document title as a single slot" do
+        node = double("HeadingNode", type: :heading, header_level: 1)
+        allow(node).to receive(:first_child).and_return(nil)
+        allow(node).to receive(:walk).and_yield(double(type: :text, string_content: "My Project Title"))
+
+        result = analysis.send(:compute_parser_signature, node)
+        expect(result).to eq([:heading, 1])
+      end
+
+      it "handles :header type (alias), H1 is also a singleton" do
         node = double("HeaderNode", type: :header, header_level: 1)
         allow(node).to receive(:first_child).and_return(nil)
         allow(node).to receive(:walk).and_yield(double(type: :text, string_content: "Main"))
 
         result = analysis.send(:compute_parser_signature, node)
-        expect(result[0]).to eq(:heading)
-        expect(result[1]).to eq(1)
+        expect(result).to eq([:heading, 1])
       end
     end
 

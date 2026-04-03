@@ -46,6 +46,7 @@ Please file a bug if you notice a violation of semantic versioning.
   node followed by destination node with no gap line between them).
   Reported via kettle-jem self-test against 6 markdown files.
 - Fixed removal-mode link-definition preservation so it skips literal fenced-code / HTML false positives and deduplicates duplicate destination definitions for the same label, preserving only the first effective definition.
+- Fixed H1 duplication when template and destination have differently-worded document titles. `FileAnalysisBase#compute_parser_signature` and `FileAnalysis#compute_parser_signature` now return `[:heading, 1]` (level-only, no text) for H1 nodes, treating the document title as a singleton structural slot. Previously, `# AGENTS.md - Development Guide` and `# AGENTS.md - myGem Development Guide` were assigned different signatures and both kept in the merged output. With the singleton approach the preferred version wins cleanly.
 
 ### Security
 

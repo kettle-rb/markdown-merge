@@ -220,8 +220,18 @@ module Markdown
         type = node.type
         case type
         when :heading, :header
-          # Content-based: Match headings by level and text content
-          [:heading, node.header_level, extract_text_content(node)]
+          level = node.header_level
+          # H1 is the document title — treat as a singleton.
+          # A well-formed markdown document has exactly one H1. Matching by text
+          # would cause a generic template title ("AGENTS.md - Development Guide")
+          # and a project-qualified destination title ("AGENTS.md - myGem Development Guide")
+          # to be treated as different nodes, keeping both in the merged output.
+          # Using level-only for H1 makes them the same structural slot so the
+          # preferred version wins cleanly without duplication.
+          return [:heading, 1] if level == 1
+
+          # H2+ match by level and normalized text content
+          [:heading, level, extract_text_content(node)]
         when :paragraph
           # Content-based: Match paragraphs by content hash (first 32 chars of digest)
           text = extract_text_content(node)

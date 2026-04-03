@@ -98,6 +98,68 @@ RSpec.describe Markdown::Merge::SmartMerger do
   end
 
   describe "#merge", :markdown_parsing do
+    context "H1 singleton behavior" do
+      let(:template_with_generic_h1) do
+        <<~MARKDOWN
+          # AGENTS.md - Development Guide
+
+          ## Contributing
+
+          Standard contribution guidelines.
+        MARKDOWN
+      end
+
+      let(:dest_with_project_h1) do
+        <<~MARKDOWN
+          # AGENTS.md - myGem Development Guide
+
+          ## Contributing
+
+          Project-specific contribution guidelines.
+        MARKDOWN
+      end
+
+      it "treats H1 as a singleton so template H1 replaces a differently-worded destination H1 (preference: :template)" do
+        merger = described_class.new(
+          template_with_generic_h1,
+          dest_with_project_h1,
+          preference: :template,
+          backend: :markly,
+        )
+        result = merger.merge
+
+        expect(result).to include("# AGENTS.md - Development Guide")
+        expect(result).not_to include("# AGENTS.md - myGem Development Guide")
+      end
+
+      it "keeps destination H1 when preference is :destination, even when text differs" do
+        merger = described_class.new(
+          template_with_generic_h1,
+          dest_with_project_h1,
+          preference: :destination,
+          backend: :markly,
+        )
+        result = merger.merge
+
+        expect(result).to include("# AGENTS.md - myGem Development Guide")
+        expect(result).not_to include("# AGENTS.md - Development Guide")
+      end
+
+      it "does not duplicate H1 when template and destination have differently-worded titles" do
+        merger = described_class.new(
+          template_with_generic_h1,
+          dest_with_project_h1,
+          preference: :template,
+          add_template_only_nodes: true,
+          backend: :markly,
+        )
+        result = merger.merge
+        h1_count = result.scan(/^# /).length
+
+        expect(h1_count).to eq(1)
+      end
+    end
+
     it "returns merged content as string" do
       merger = described_class.new(template_content, dest_content)
       result = merger.merge

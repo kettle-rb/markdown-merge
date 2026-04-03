@@ -178,8 +178,11 @@ module Markdown
 
         case canonical_type
         when :heading
-          # Content-based: Match headings by level and text content
-          [:heading, raw_node.header_level, extract_text_content(raw_node)]
+          level = raw_node.header_level
+          # H1 is the document title — treat as a singleton (see FileAnalysisBase for rationale)
+          return [:heading, 1] if level == 1
+
+          [:heading, level, extract_text_content(raw_node)]
         when :paragraph
           # Content-based: Match paragraphs by content hash (first 32 chars of digest)
           text = extract_text_content(raw_node)
