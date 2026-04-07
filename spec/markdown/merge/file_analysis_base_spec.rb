@@ -269,7 +269,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
     end
 
     describe "with :list node type" do
-      it "returns list signature with type and count" do
+      it "returns list signature with type and content fingerprint" do
         node = double("ListNode", type: :list)
         allow(node).to receive(:respond_to?).with(:list_type).and_return(true)
         allow(node).to receive_messages(list_type: :bullet, first_child: nil)
@@ -277,7 +277,7 @@ RSpec.describe Markdown::Merge::FileAnalysisBase do
         result = analysis.send(:compute_parser_signature, node)
         expect(result[0]).to eq(:list)
         expect(result[1]).to eq(:bullet)
-        expect(result[2]).to be_a(Integer)
+        expect(result[2]).to be_a(String)
       end
 
       it "handles no list_type method" do

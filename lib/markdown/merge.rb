@@ -112,6 +112,7 @@ module Markdown
     autoload :TableMatchAlgorithm, "markdown/merge/table_match_algorithm"
     autoload :TableMatchRefiner, "markdown/merge/table_match_refiner"
     autoload :CodeBlockMerger, "markdown/merge/code_block_merger"
+    autoload :ListMerger, "markdown/merge/list_merger"
     autoload :SmartMergerBase, "markdown/merge/smart_merger_base"
     autoload :LinkDefinitionNode, "markdown/merge/link_definition_node"
     autoload :GapLineNode, "markdown/merge/gap_line_node"

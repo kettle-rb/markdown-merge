@@ -148,6 +148,7 @@ module Markdown
         preference: :destination,
         add_template_only_nodes: false,
         inner_merge_code_blocks: false,
+        inner_merge_lists: false,
         remove_template_missing_nodes: false,
         freeze_token: FileAnalysisBase::DEFAULT_FREEZE_TOKEN,
         match_refiner: nil,
@@ -177,6 +178,18 @@ module Markdown
           inner_merge_code_blocks
         else
           raise ArgumentError, "inner_merge_code_blocks must be true, false, or a CodeBlockMerger instance"
+        end
+
+        # Set up list merger
+        @list_merger = case inner_merge_lists
+        when true
+          ListMerger.new
+        when false
+          nil
+        when ListMerger
+          inner_merge_lists
+        else
+          raise ArgumentError, "inner_merge_lists must be true, false, or a ListMerger instance"
         end
 
         # Parse template
@@ -378,6 +391,12 @@ module Markdown
           return if inner_result
         end
 
+        # Try inner-merge for lists
+        if @list_merger && list_node?(template_node) && list_node?(dest_node)
+          inner_result = try_inner_merge_list_to_builder(template_node, dest_node, builder, stats)
+          return if inner_result
+        end
+
         resolution = @resolver.resolve(
           template_node,
           dest_node,
@@ -494,6 +513,45 @@ module Markdown
         return false if node.respond_to?(:freeze_node?) && node.freeze_node?
 
         node.respond_to?(:type) && node.type == :code_block
+      end
+
+      # Check if a node is an ordered or unordered list.
+      #
+      # @param node [Object] Node to check
+      # @return [Boolean] true if the node is a list
+      def list_node?(node)
+        return false if node.respond_to?(:freeze_node?) && node.freeze_node?
+
+        node.respond_to?(:type) && node.type == :list
+      end
+
+      # Try to inner-merge two list nodes at the item level, adding to OutputBuilder.
+      #
+      # @param template_node [Object] Template list node
+      # @param dest_node [Object] Destination list node
+      # @param builder [OutputBuilder] Output builder to add to
+      # @param stats [Hash] Statistics hash to update
+      # @return [Boolean] true if merged, false to fall back to standard resolution
+      def try_inner_merge_list_to_builder(template_node, dest_node, builder, stats)
+        result = @list_merger.merge_lists(
+          template_node,
+          dest_node,
+          preference: @preference.is_a?(Hash) ? @preference.fetch(:default, :destination) : @preference,
+          add_template_only_nodes: @add_template_only_nodes,
+          template_analysis: @template_analysis,
+          dest_analysis: @dest_analysis,
+        )
+
+        if result[:merged]
+          stats[:nodes_modified] += 1 unless result.dig(:stats, :decision) == :identical
+          stats[:inner_merges] ||= 0
+          stats[:inner_merges] += 1
+          builder.add_raw(result[:content])
+          true
+        else
+          DebugLogger.debug("List inner-merge skipped", {reason: result[:reason]})
+          false
+        end
       end
 
       # Try to inner-merge two code block nodes, adding to OutputBuilder

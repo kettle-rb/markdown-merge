@@ -242,9 +242,20 @@ module Markdown
           fence_info = node.respond_to?(:fence_info) ? node.fence_info : nil
           [:code_block, fence_info, Digest::SHA256.hexdigest(content)[0, 16]]
         when :list
-          # Structure-based: Match lists by type and item count (content may differ)
+          # Content-fingerprint: Match lists by type and a hash of the first few
+          # items' significant tokens. This lets two lists with similar (but not
+          # identical) content match by signature so item-level inner-merge can run,
+          # rather than the template list being appended as a template-only node.
           list_type = node.respond_to?(:list_type) ? node.list_type : nil
-          [:list, list_type, count_children(node)]
+          items_text = []
+          child = node.first_child
+          while child
+            items_text << extract_text_content(child).downcase.gsub(/\W+/, " ").strip
+            child = next_sibling(child)
+            break if items_text.size >= 5
+          end
+          fingerprint = Digest::SHA256.hexdigest(items_text.sort.join("|"))[0, 16]
+          [:list, list_type, fingerprint]
         when :block_quote, :blockquote
           # Content-based: Match block quotes by content hash
           text = extract_text_content(node)
