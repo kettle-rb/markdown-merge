@@ -31,14 +31,10 @@ module Markdown
     #
     # @see SmartMergerBase#try_inner_merge_list_to_builder
     class ListMerger
+      include Ast::Merge::JaccardSimilarity
+
       # Minimum Jaccard token overlap to consider two list items as matching.
       ITEM_MATCH_THRESHOLD = 0.35
-
-      # Words too common to be discriminating when matching list items.
-      STOPWORDS = %w[
-        a an and are as at be but by for from has have in is it its of on or so
-        that the their then there they this to up was will with
-      ].to_set.freeze
 
       # Merge two list nodes.
       #
@@ -205,13 +201,7 @@ module Markdown
 
       def item_tokens(item)
         text = item.respond_to?(:text) ? item.text.to_s : ""
-        text.downcase.scan(/[[:alpha:]][[:alnum:]_-]{2,}/).reject { |t| STOPWORDS.include?(t) }.to_set
-      end
-
-      def jaccard(a, b)
-        return 0.0 if a.empty? || b.empty?
-
-        (a & b).size.to_f / (a | b).size
+        extract_tokens(text)
       end
 
       def not_merged(reason)
