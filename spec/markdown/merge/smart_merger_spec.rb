@@ -1248,4 +1248,39 @@ RSpec.describe Markdown::Merge::SmartMerger do
       expect(markly_result).to include("Custom Section")
     end
   end
+
+  describe "multi-byte character (emoji) handling", :markly_merge do
+    it "does not duplicate headings when destination contains emoji" do
+      template = "# Project\n\n## Contributing\n\nContent.\n"
+      destination = "# 🪙 Project\n\n## Contributing\n\nCustom content.\n"
+      merger = described_class.new(template, destination, backend: :markly)
+      result = merger.merge
+      expect(result.scan("## Contributing").length).to eq(1)
+    end
+
+    it "preserves emoji in headings" do
+      template = "# Title\n\nText.\n"
+      destination = "# 🍲 Title\n\nCustom text.\n"
+      merger = described_class.new(template, destination, backend: :markly, preference: :destination)
+      result = merger.merge
+      expect(result).to include("🍲")
+    end
+
+    it "handles emoji in list items without duplication" do
+      pending "requires ast-merge byteslice fix to propagate through markly-merge backend"
+      template = "- Item A\n- Item B\n"
+      destination = "- 🪙 Item A\n- Item B\n- Item C\n"
+      merger = described_class.new(template, destination, backend: :markly, preference: :destination, add_template_only_nodes: true)
+      result = merger.merge
+      expect(result.scan("Item B").length).to eq(1)
+    end
+
+    it "handles CJK in paragraphs without duplication" do
+      template = "# Title\n\nEnglish content.\n"
+      destination = "# Title\n\n日本語のコンテンツ。\n"
+      merger = described_class.new(template, destination, backend: :markly, preference: :destination)
+      result = merger.merge
+      expect(result.scan("# Title").length).to eq(1)
+    end
+  end
 end
