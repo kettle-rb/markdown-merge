@@ -524,7 +524,9 @@ Example with a Ruby code block:
 
 ````markdown
 ```ruby
+
 # Template
+
 class MyClass
   def new_method
     puts "from template"
@@ -537,7 +539,9 @@ When merged(with:
 
 ````markdown
 ```ruby
+
 # Destination
+
 class MyClass
   def existing_method
     puts "custom"
