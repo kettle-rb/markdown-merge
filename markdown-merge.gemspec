@@ -13,8 +13,8 @@ Gem::Specification.new do |spec|
   spec.authors = ["Peter H. Boling"]
   spec.email = ["floss@galtzo.com"]
 
-  spec.summary = "🍲 Ast::Merge-based structure for building Markdown merging tools like markly-merge and commonmarker-merge"
-  spec.description = "🍲 Ast::Merge-based structure for merging Markdown files with tools like markly-merge and commonmarker-merge"
+  spec.summary = "☯️ Ast::Merge-based structure for building Markdown merging tools like markly-merge and commonmarker-merge"
+  spec.description = "☯️ Ast::Merge-based structure for merging Markdown files with tools like markly-merge and commonmarker-merge"
   spec.homepage = "https://github.com/kettle-rb/markdown-merge"
   spec.licenses = ["AGPL-3.0-only"]
   spec.required_ruby_version = ">= 3.2.0"
