@@ -481,9 +481,119 @@ with HTML comments that are invisible when the Markdown is rendered:
 ```markdown
 <!-- markdown-merge:freeze -->
 
-# Some Markdown in here!
+## This Section Is Protected
+
+Any content here will be preserved exactly as-is during merges.
+The merge tool will not modify, replace, or remove this content.
 
 <!-- markdown-merge:unfreeze -->
+```
+
+Add an optional frozen reason to document why:
+
+```markdown
+<!-- markdown-merge:freeze Custom table - manually maintained -->
+| Feature | Status |
+|---------|--------|
+| Custom  | ✅     |
+<!-- markdown-merge:unfreeze -->
+```
+
+### Inner-Merge Code Blocks
+
+When enabled, fenced code blocks are merged using language-specific `*-merge` gems:
+
+```ruby
+merger = SomeParser::Merge::SmartMerger.new(
+  template,
+  destination,
+  inner_merge_code_blocks: true,
+)
+```
+
+Supported languages and their mergers:
+
+| Language | Fence Info | Merger |
+| --- | --- | --- |
+| Ruby | `ruby`, `rb` | prism-merge |
+| YAML | `yaml`, `yml` | psych-merge |
+| JSON | `json` | json-merge |
+| TOML | `toml` | toml-merge |
+
+Example with a Ruby code block:
+
+````markdown
+```ruby
+# Template
+class MyClass
+  def new_method
+    puts "from template"
+  end
+end
+```
+````
+
+When merged(with:
+
+````markdown
+```ruby
+# Destination
+class MyClass
+  def existing_method
+    puts "custom"
+  end
+end)
+```
+````
+
+Result (with `inner_merge_code_blocks: true`):
+
+````markdown
+```ruby
+class MyClass
+  def existing_method
+    puts "custom"
+  end
+
+  def new_method
+    puts "from template"
+  end
+end
+```
+````
+
+### Table Match Refiner
+
+When tables don't match by exact signature, the `TableMatchRefiner` uses
+fuzzy matching to pair tables with similar structure:
+
+```ruby
+refiner = Markdown::Merge::TableMatchRefiner.new(
+  threshold: 0.5,  # Minimum similarity (0.0-1.0)
+  algorithm_options: {
+    weights: {
+      header_match: 0.25,  # Header cell similarity
+      first_column: 0.20,  # Row label similarity
+      row_content: 0.25,   # Row content overlap
+      total_cells: 0.15,   # Overall cell matching
+      position: 0.15,      # Position distance
+    },
+  },
+)
+
+merger = SomeParser::Merge::SmartMerger.new(
+  template,
+  destination,
+  match_refiner: refiner,
+)
+```
+
+### Debug Logging
+
+Enable debug logging to see merge decisions:
+
+```bash
+export MARKDOWN_MERGE_DEBUG=1
 ```
 
 ## 🔧 Basic Usage
@@ -569,6 +679,29 @@ module MyParser
   end
 end
 ```
+
+### Freeze Block Protection
+
+Both implementations support freeze blocks for protecting customized sections:
+
+```markdown
+
+# My Project
+
+## Installation
+
+<!-- markdown-merge:freeze Custom install instructions -->
+This installation section has been customized and will be preserved
+during template merges, regardless of what the template contains.
+<!-- markdown-merge:unfreeze -->
+
+## Usage
+
+Standard usage section - can be updated from template.
+```
+
+Content between freeze markers is always preserved from the destination file,
+even when the template has different content for that section.
 
 ## 🦷 FLOSS Funding
 
