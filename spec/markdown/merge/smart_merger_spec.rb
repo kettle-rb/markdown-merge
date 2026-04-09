@@ -65,7 +65,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
       expect(merger.backend).to eq(:commonmarker).or eq(:markly)
     end
 
-    it "accepts explicit backend option", :commonmarker do
+    it "accepts explicit backend option", :commonmarker_merge do
       merger = described_class.new(template_content, dest_content, backend: :commonmarker)
       expect(merger.backend).to eq(:commonmarker)
     end

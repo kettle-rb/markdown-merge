@@ -25,7 +25,7 @@ RSpec.describe Markdown::Merge::FileAnalysis, "coverage", :markdown_parsing do
       expect([:commonmarker, :markly]).to include(analysis.backend)
     end
 
-    it "uses commonmarker when requested", :commonmarker do
+    it "uses commonmarker when requested", :commonmarker_merge do
       analysis = described_class.new(simple_markdown, backend: :commonmarker)
       expect(analysis.backend).to eq(:commonmarker)
     end

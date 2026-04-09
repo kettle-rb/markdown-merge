@@ -43,7 +43,7 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       expect(analysis.backend).to eq(:commonmarker).or eq(:markly)
     end
 
-    it "accepts explicit backend option", :commonmarker_backend do
+    it "accepts explicit backend option", :commonmarker_merge do
       analysis = described_class.new(simple_markdown, backend: :commonmarker)
       expect(analysis.backend).to eq(:commonmarker)
     end
