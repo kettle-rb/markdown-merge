@@ -129,7 +129,7 @@ module Markdown
             # Find the first matched dest index for template items after ti
             next_matched_di = (ti + 1..t_items.size - 1).find { |k| matches.key?(k) }&.then { |k| matches[k] }
             insert_before = next_matched_di.nil? ? d_items.size : next_matched_di
-            next unless insert_before <= di
+            next if insert_before > di
 
             result << {type: :template_only, template_item: t_item}
             inserted_t << ti

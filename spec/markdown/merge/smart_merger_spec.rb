@@ -98,7 +98,7 @@ RSpec.describe Markdown::Merge::SmartMerger do
   end
 
   describe "#merge", :markdown_parsing do
-    context "H1 singleton behavior" do
+    context "when H1 is singleton" do
       let(:template_with_generic_h1) do
         <<~MARKDOWN
           # AGENTS.md - Development Guide
