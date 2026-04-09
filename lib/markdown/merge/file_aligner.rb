@@ -25,7 +25,6 @@ module Markdown
     # @see FileAnalysisBase
     # @see SmartMergerBase
     class FileAligner < ::Ast::Merge::FileAlignerBase
-
       # @return [FileAnalysisBase] Template file analysis
       attr_reader :template_analysis
 
@@ -63,7 +62,6 @@ module Markdown
           dest_only: alignment.count { |e| e[:type] == :dest_only },
         })
       end
-
 
       def template_only_sort_key(entry, _dest_size)
         anchor_dest_index = entry[:anchor_dest_index]

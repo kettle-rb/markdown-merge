@@ -46,20 +46,23 @@ module Markdown
       # @param dest_analysis [FileAnalysisBase] Destination file analysis (for source text)
       # @return [Hash] { merged: Boolean, content: String } or { merged: false, reason: String }
       def merge_lists(template_node, dest_node,
-                      preference:,
-                      add_template_only_nodes: true,
-                      template_analysis: nil,
-                      dest_analysis: nil)
+        preference:,
+        add_template_only_nodes: true,
+        template_analysis: nil,
+        dest_analysis: nil)
         t_items = extract_items(template_node)
         d_items = extract_items(dest_node)
 
         return not_merged("empty list") if t_items.empty? && d_items.empty?
 
         alignment = align_items(t_items, d_items)
-        lines = emit_lines(alignment, preference: preference,
-                                      add_template_only: add_template_only_nodes,
-                                      template_analysis: template_analysis,
-                                      dest_analysis: dest_analysis)
+        lines = emit_lines(
+          alignment,
+          preference: preference,
+          add_template_only: add_template_only_nodes,
+          template_analysis: template_analysis,
+          dest_analysis: dest_analysis,
+        )
         return not_merged("no lines emitted") if lines.empty?
 
         {merged: true, content: lines.join("\n") + "\n", stats: {decision: :merged}}
@@ -153,15 +156,15 @@ module Markdown
       # --- emission ---
 
       def emit_lines(alignment, preference:, add_template_only:,
-                     template_analysis:, dest_analysis:)
+        template_analysis:, dest_analysis:)
         counter = 1
         lines = []
 
         alignment.each do |entry|
           case entry[:type]
           when :match
-            node = preference == :template ? entry[:template_item] : entry[:dest_item]
-            analysis = preference == :template ? template_analysis : dest_analysis
+            node = (preference == :template) ? entry[:template_item] : entry[:dest_item]
+            analysis = (preference == :template) ? template_analysis : dest_analysis
             text = item_bare_text(node, analysis)
             lines << "#{counter}. #{text}"
             counter += 1

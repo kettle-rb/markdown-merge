@@ -1024,7 +1024,6 @@ module Markdown
         %w[code_block html html_block custom_block].include?(node.type.to_s)
       end
 
-
       # Convert a node to its source text.
       #
       # Default implementation uses source positions and falls back to to_commonmark.
