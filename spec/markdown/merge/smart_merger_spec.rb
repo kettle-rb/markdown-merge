@@ -858,8 +858,8 @@ RSpec.describe Markdown::Merge::SmartMerger do
         MARKDOWN
 
         refiner = Ast::Merge::ContentMatchRefiner.new(
-          threshold: 0.8,
-          node_types: [:paragraph],
+          threshold: 0.7,
+          node_types: [:paragraph, :html_block],
         )
 
         merger = described_class.new(
