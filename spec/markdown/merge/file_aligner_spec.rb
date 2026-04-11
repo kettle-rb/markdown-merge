@@ -279,6 +279,48 @@ RSpec.describe Markdown::Merge::FileAligner do
         expect(template_only_index).to be < second_match_index
       end
     end
+
+    context "with duplicate list shapes in different sections" do
+      let(:template_nodes) { [double("T heading coverage"), double("T coverage list"), double("T heading executables"), double("T exec list")] }
+      let(:dest_nodes) { [double("D heading coverage"), double("D exec list under coverage"), double("D coverage list under coverage"), double("D heading executables"), double("D exec list proper")] }
+
+      let(:template_analysis) do
+        analysis = double("TemplateAnalysis")
+        allow(analysis).to receive(:statements).and_return(template_nodes)
+        allow(analysis).to receive(:signature_at).with(0).and_return([:heading, 2, "Coverage"])
+        allow(analysis).to receive(:signature_at).with(1).and_return([:list, :unordered, 8])
+        allow(analysis).to receive(:signature_at).with(2).and_return([:heading, 2, "Executables"])
+        allow(analysis).to receive(:signature_at).with(3).and_return([:list, :unordered, 8])
+        analysis
+      end
+
+      let(:dest_analysis) do
+        analysis = double("DestAnalysis")
+        allow(analysis).to receive(:statements).and_return(dest_nodes)
+        allow(analysis).to receive(:signature_at).with(0).and_return([:heading, 2, "Coverage"])
+        allow(analysis).to receive(:signature_at).with(1).and_return([:list, :unordered, 8])
+        allow(analysis).to receive(:signature_at).with(2).and_return([:list, :unordered, 8])
+        allow(analysis).to receive(:signature_at).with(3).and_return([:heading, 2, "Executables"])
+        allow(analysis).to receive(:signature_at).with(4).and_return([:list, :unordered, 8])
+        analysis
+      end
+
+      it "matches lists by heading context instead of raw shape alone" do
+        aligner = described_class.new(template_analysis, dest_analysis)
+        allow(aligner).to receive(:first_list_item_anchor).with(template_nodes[1], template_analysis).and_return("k_soup_cov_do")
+        allow(aligner).to receive(:first_list_item_anchor).with(template_nodes[3], template_analysis).and_return("gem_checksums")
+        allow(aligner).to receive(:first_list_item_anchor).with(dest_nodes[1], dest_analysis).and_return("gem_checksums")
+        allow(aligner).to receive(:first_list_item_anchor).with(dest_nodes[2], dest_analysis).and_return("k_soup_cov_do")
+        allow(aligner).to receive(:first_list_item_anchor).with(dest_nodes[4], dest_analysis).and_return("gem_checksums")
+        result = aligner.align
+
+        coverage_match = result.find { |entry| entry[:type] == :match && entry[:template_index] == 1 }
+        executables_match = result.find { |entry| entry[:type] == :match && entry[:template_index] == 3 }
+
+        expect(coverage_match[:dest_index]).to eq(2)
+        expect(executables_match[:dest_index]).to eq(4)
+      end
+    end
   end
 
   describe "#build_signature_map (private)" do

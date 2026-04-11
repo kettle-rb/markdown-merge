@@ -45,6 +45,13 @@ module Markdown
 
       private
 
+      def signature_for(analysis, index)
+        signature = analysis.signature_at(index)
+        return signature unless list_signature?(signature)
+
+        contextual_list_signature(analysis, index, signature)
+      end
+
       def template_only_entry_context(template_index:, matched_entries_by_template_position:, **)
         _previous_match, next_match = surrounding_matched_entries(matched_entries_by_template_position, template_index)
 
@@ -72,6 +79,64 @@ module Markdown
         else
           [1, entry[:template_index], 0, 0]
         end
+      end
+
+      def list_signature?(signature)
+        signature.is_a?(Array) && signature.first == :list
+      end
+
+      def contextual_list_signature(analysis, index, signature)
+        statement = statements_for(analysis)[index]
+        list_type = signature[1]
+        preceding_context = nearest_list_context_signature(analysis, index)
+        first_anchor = first_list_item_anchor(statement, analysis)
+        [:list, list_type, preceding_context, first_anchor]
+      end
+
+      def heading_signature?(signature)
+        signature.is_a?(Array) && signature.first == :heading
+      end
+
+      def nearest_list_context_signature(analysis, index)
+        (index - 1).downto(0) do |current_index|
+          candidate = analysis.signature_at(current_index)
+          next unless contextual_predecessor_signature?(candidate)
+
+          return candidate
+        end
+
+        nil
+      end
+
+      def contextual_predecessor_signature?(signature)
+        signature.is_a?(Array) && %i[heading paragraph code_block].include?(signature.first)
+      end
+
+      def first_list_item_anchor(statement, analysis)
+        raw = Ast::Merge::NodeTyping.unwrap(statement)
+        first_item = nil
+
+        raw.each do |child|
+          next unless child.respond_to?(:type) && %w[list_item item].include?(child.type.to_s)
+
+          first_item = child
+          break
+        end
+
+        return "" unless first_item
+
+        text = if analysis && first_item.respond_to?(:source_position) && first_item.source_position
+          pos = first_item.source_position
+          analysis.source_range(pos[:start_line], pos[:end_line]).to_s
+        else
+          first_item.respond_to?(:text) ? first_item.text.to_s : ""
+        end
+
+        text
+          .strip
+          .sub(/\A(?:[-*+]|\d+\.)\s+/, "")
+          .gsub(/\s+/, " ")
+          .downcase
       end
     end
   end

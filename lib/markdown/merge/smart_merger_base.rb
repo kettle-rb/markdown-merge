@@ -160,7 +160,7 @@ module Markdown
         @preference = preference
         @add_template_only_nodes = add_template_only_nodes
         @remove_template_missing_nodes = remove_template_missing_nodes
-        @match_refiner = match_refiner
+        @match_refiner = match_refiner || default_match_refiner(inner_merge_lists: inner_merge_lists)
         @node_typing = node_typing
         @normalize_whitespace = normalize_whitespace
         @rehydrate_link_references = rehydrate_link_references
@@ -222,6 +222,12 @@ module Markdown
           template_analysis: @template_analysis,
           dest_analysis: @dest_analysis,
         )
+      end
+
+      def default_match_refiner(inner_merge_lists:)
+        return unless inner_merge_lists
+
+        ListMatchRefiner.new
       end
 
       # Create a FileAnalysis instance for the given content.
