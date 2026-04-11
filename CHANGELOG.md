@@ -179,10 +179,7 @@ Please file a bug if you notice a violation of semantic versioning.
   - Skips links/images with titles (would lose title information)
   - Tracks duplicate definitions and title conflicts in problems
   - Prefers shortest label when multiple labels point to same URL
-- **SmartMergerBase options**:
-  - `normalize_whitespace: false | true | :basic | :link_refs | :strict` - whitespace normalization mode
-  - `rehydrate_link_references: false` - convert inline links to reference style
-- **PartialTemplateMerger options**:
+- **SmartMergerBase, PartialTemplateMerger options**:
   - `normalize_whitespace: false | true | :basic | :link_refs | :strict` - whitespace normalization mode
   - `rehydrate_link_references: false` - convert inline links to reference style
 - **MergeResult#problems**: Access `DocumentProblems` instance for introspection
