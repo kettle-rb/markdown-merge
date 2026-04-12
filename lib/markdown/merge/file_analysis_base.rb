@@ -121,6 +121,20 @@ module Markdown
         @comment_capability ||= comment_tracker.augment(owners: []).capability
       end
 
+      # Describe how Markdown merges currently own and emit comments.
+      #
+      # Standalone HTML comments are source-augmented and emitted through the
+      # shared synthetic comment layer rather than parser-native comment AST.
+      #
+      # @return [Ast::Merge::Comment::SupportStyle]
+      def comment_support_style
+        @comment_support_style ||= Ast::Merge::Comment::SupportStyle.source_augmented_synthetic(
+          source: :markdown_source,
+          capability: comment_capability.level,
+          style: :html_comment,
+        )
+      end
+
       # Get all tracked comments converted to shared comment nodes.
       #
       # @return [Array]

@@ -116,6 +116,16 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       expect(augmenter.preamble_region).to be_nil
       expect(augmenter.postlude_region).to be_nil
     end
+
+    it "reports a source-augmented synthetic support style" do
+      analysis = described_class.new(commented_markdown)
+
+      expect(analysis.comment_support_style).to be_a(Ast::Merge::Comment::SupportStyle)
+      expect(analysis.comment_support_style.source_augmented_synthetic?).to be(true)
+      expect(analysis.comment_support_style.synthetic_write?).to be(true)
+      expect(analysis.comment_support_style.details[:source]).to eq(:markdown_source)
+      expect(analysis.comment_support_style.details[:style]).to eq(:html_comment)
+    end
   end
 
   describe "shared layout compliance", :markdown_parsing do
