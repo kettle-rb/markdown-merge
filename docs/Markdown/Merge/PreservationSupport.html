@@ -4,7 +4,7 @@
     <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>
-  Class: Markdown::Merge::Error
+  Module: Markdown::Merge::PreservationSupport
   
     &mdash; Documentation by YARD 0.9.39
   
@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="../../css/common.css" type="text/css" />
 
 <script type="text/javascript">
-  pathId = "Markdown::Merge::Error";
+  pathId = "Markdown::Merge::PreservationSupport";
   relpath = '../../';
 </script>
 
@@ -36,10 +36,10 @@
       <div id="header">
         <div id="menu">
   
-    <a href="../../_index.html">Index (E)</a> &raquo;
+    <a href="../../_index.html">Index (P)</a> &raquo;
     <span class='title'><span class='object_link'><a href="../../Markdown.html" title="Markdown (module)">Markdown</a></span></span> &raquo; <span class='title'><span class='object_link'><a href="../Merge.html" title="Markdown::Merge (module)">Merge</a></span></span>
      &raquo; 
-    <span class="title">Error</span>
+    <span class="title">PreservationSupport</span>
   
 </div>
 
@@ -59,52 +59,45 @@
         <div class="clear"></div>
       </div>
 
-      <div id="content"><h1>Class: Markdown::Merge::Error
+      <div id="content"><h1>Module: Markdown::Merge::PreservationSupport
   
   
   
 </h1>
 <div class="box_info">
   
+
+  
+  
+  
+  
+  
+
+  
   <dl>
-    <dt>Inherits:</dt>
-    <dd>
-      <span class="inheritName">Ast::Merge::Error</span>
-      
-        <ul class="fullTree">
-          <li>Object</li>
-          
-            <li class="next">Ast::Merge::Error</li>
-          
-            <li class="next">Markdown::Merge::Error</li>
-          
-        </ul>
-        <a href="#" class="inheritanceTree">show all</a>
-      
-    </dd>
+    <dt>Included in:</dt>
+    <dd><span class='object_link'><a href="PartialTemplateMerger.html" title="Markdown::Merge::PartialTemplateMerger (class)">PartialTemplateMerger</a></span>, <span class='object_link'><a href="SmartMergerBase.html" title="Markdown::Merge::SmartMergerBase (class)">SmartMergerBase</a></span></dd>
   </dl>
-  
-
-  
-  
-  
-  
-  
-
   
 
   
   <dl>
     <dt>Defined in:</dt>
-    <dd>lib/markdown/merge.rb</dd>
+    <dd>lib/markdown/merge/preservation_support.rb</dd>
   </dl>
   
 </div>
 
 <h2>Overview</h2><div class="docstring">
   <div class="discussion">
-    <p>Base error class for Markdown::Merge<br />
-Inherits from Ast::Merge::Error for consistency across merge gems.</p>
+    <p>Shared Markdown-local helper methods for statement classification,<br />
+standalone comment fragment preservation, and remove-plan-backed range filtering.</p>
+
+<p>Provides the canonical gap-line / blank-gap-line / non-blank-gap-line /<br />
+structural-for-preservation predicate set used by both SmartMergerBase<br />
+(removal mode) and PartialTemplateMerger (replace-mode insertion indexing).<br />
+Both classes should call these predicates rather than performing direct<br />
+is_a?(GapLineNode) checks.</p>
 
 
   </div>
@@ -120,7 +113,6 @@ Inherits from Ast::Merge::Error for consistency across merge gems.</p>
 
 
 
-  
 
 </div>
 

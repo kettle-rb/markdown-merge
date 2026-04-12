@@ -6,7 +6,7 @@
 <title>
   File: CHANGELOG
   
-    &mdash; Documentation by YARD 0.9.38
+    &mdash; Documentation by YARD 0.9.39
   
 </title>
 
@@ -72,13 +72,39 @@ Please file a bug if you notice a violation of semantic versioning.</p>
 
 <h3 id="added">Added</h3>
 
+<ul>
+  <li>Documented the current full-document Markdown <code>remove_template_missing_nodes: true</code> contract in the README: top-level destination-only structural blocks are removed conservatively while standalone HTML comment-only fragments, link reference definitions, and freeze blocks remain preserved.</li>
+  <li>Documented the shared Markdown comment-ownership rollout across boundary ownership, matched-node fallback, partial-template <code>replace_mode</code>, full-document fuzzy smart-merger behavior, and thin-wrapper parity around standalone HTML comment regions.</li>
+</ul>
+
 <h3 id="changed">Changed</h3>
+
+<ul>
+  <li>Adopted and documented the shared <code>Ast::Merge::Layout</code> contract as the Markdown-family source-of-truth for top-level block-gap ownership, with wrapper-parity shared layout compliance coverage</li>
+  <li>Clarified that preserved standalone HTML comment postlude/orphan fragments keep one separator blank line on the leading edge when removed structural content collapses around them, and that generic inline-comment promotion plus recursive/nested removal semantics remain intentionally deferred.</li>
+  <li>Clarified that removal-mode ownership documentation now includes the broader link-definition follow-up where kept template-only paragraphs may retain destination-owned consumed link reference definitions after the legacy destination block holding them is removed.</li>
+  <li>Rebased <code>Markdown::Merge::FileAligner</code> onto the shared <code>Ast::Merge::FileAlignerBase</code>, leaving Markdown-local template-only anchor placement, fuzzy refiner usage, debug logging, and alignment sort hooks in the Markdown layer</li>
+  <li>Adopted <code>Ast::Merge::TrailingGroups::AlignmentSort</code> for the shared family model of template-only Markdown block ordering instead of maintaining a repo-local alignment sorter</li>
+</ul>
 
 <h3 id="deprecated">Deprecated</h3>
 
 <h3 id="removed">Removed</h3>
 
 <h3 id="fixed">Fixed</h3>
+
+<ul>
+  <li>Fixed spurious blank line insertion between paragraph and list/code-block nodes.<br>
+<code>OutputBuilder</code> auto-spacing now detects when consecutive nodes are adjacent in<br>
+the same source file (same analysis object, consecutive line numbers) and skips<br>
+the structural blank line. This preserves tight paragraph→list formatting like<br>
+<code>**Label:**\n- item</code> without inserting an unwanted blank line between them.<br>
+Auto-spacing still fires correctly for cross-source transitions (e.g., template<br>
+node followed by destination node with no gap line between them).<br>
+Reported via kettle-jem self-test against 6 markdown files.</li>
+  <li>Fixed removal-mode link-definition preservation so it skips literal fenced-code / HTML false positives and deduplicates duplicate destination definitions for the same label, preserving only the first effective definition.</li>
+  <li>Fixed H1 duplication when template and destination have differently-worded document titles. <code>FileAnalysisBase#compute_parser_signature</code> and <code>FileAnalysis#compute_parser_signature</code> now return <code>[:heading, 1]</code> (level-only, no text) for H1 nodes, treating the document title as a singleton structural slot. Previously, <code># AGENTS.md - Development Guide</code> and <code># AGENTS.md - myGem Development Guide</code> were assigned different signatures and both kept in the merged output. With the singleton approach the preferred version wins cleanly.</li>
+</ul>
 
 <h3 id="security">Security</h3>
 
@@ -328,16 +354,7 @@ for creating real node instances in tests instead of fragile mocks
     </ul>
   </li>
   <li>
-<strong>SmartMergerBase options</strong>:
-    <ul>
-      <li>
-<code>normalize_whitespace: false | true | :basic | :link_refs | :strict</code> - whitespace normalization mode</li>
-      <li>
-<code>rehydrate_link_references: false</code> - convert inline links to reference style</li>
-    </ul>
-  </li>
-  <li>
-<strong>PartialTemplateMerger options</strong>:
+<strong>SmartMergerBase, PartialTemplateMerger options</strong>:
     <ul>
       <li>
 <code>normalize_whitespace: false | true | :basic | :link_refs | :strict</code> - whitespace normalization mode</li>
@@ -613,9 +630,9 @@ content methods return empty but the inner node has the actual content.</li>
 </div></div>
 
       <div id="footer">
-  Generated on Thu Feb 19 09:34:59 2026 by
+  Generated on Sun Apr 12 11:49:35 2026 by
   <a href="https://yardoc.org" title="Yay! A Ruby Documentation Tool" target="_parent">yard</a>
-  0.9.38 (ruby-4.0.1).
+  0.9.39 (ruby-4.0.2).
 </div>
 
     </div>
