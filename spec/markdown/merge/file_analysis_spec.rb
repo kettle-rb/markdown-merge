@@ -170,6 +170,14 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       let(:expected_owner_leading_gap_kind) { :preamble }
       let(:expected_owner_trailing_gap_kind) { :interstitial }
     end
+
+    it "surfaces inferred layout gaps through comment attachments for structural owners" do
+      attachment = analysis.comment_attachment_for(first_owner)
+
+      expect(attachment.leading_gap&.kind).to eq(:preamble)
+      expect(attachment.trailing_gap&.kind).to eq(:interstitial)
+      expect(attachment.layout_gaps.map { |gap| gap.start_line..gap.end_line }).to eq([1..1, 3..3])
+    end
   end
 
   describe "#freeze_blocks", :markdown_parsing do
