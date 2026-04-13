@@ -128,10 +128,10 @@ module Markdown
       #
       # @return [Ast::Merge::Comment::SupportStyle]
       def comment_support_style
-        @comment_support_style ||= Ast::Merge::Comment::SupportStyle.source_augmented_synthetic(
+        @comment_support_style ||= shared_comment_support_style(
           source: :markdown_source,
-          capability: comment_capability.level,
           style: :html_comment,
+          read_strategy: :source_augmented_synthetic,
         )
       end
 
@@ -170,11 +170,16 @@ module Markdown
       # @param options [Hash] Additional metadata / lookup overrides
       # @return [Object]
       def comment_attachment_for(owner, **options)
-        merge_comment_attachment_with_layout(
+        shared_comment_attachment_for(
           owner,
-          comment_tracker.comment_attachment_for(owner, **options),
+          tracker_attachment: comment_tracker.comment_attachment_for(owner, **options),
           **options,
         )
+      end
+
+      # @return [Symbol]
+      def comment_attachment_strategy
+        :tracker_layout_merge
       end
 
       # Build a passive shared comment augmenter for this analysis.
