@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe "markdown comment behavior complements", :markdown_parsing do
+RSpec.describe Markdown::Merge::SmartMerger, "comment behavior complements", :markdown_parsing do
   describe "link definition complement" do
     it "preserves destination-only link definitions even in removal mode" do
       template = <<~MARKDOWN
