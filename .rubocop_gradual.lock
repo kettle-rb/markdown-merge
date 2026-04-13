@@ -1,0 +1,13 @@
+{
+  "spec/markdown/merge/comment_behavior_complements_spec.rb:1604334868": [
+    [3, 1, 94, "RSpec/SpecFilePathFormat: Spec path should end with `markdown/merge/smart_merger*comment_behavior_complements*_spec.rb`.", 1090409225],
+    [3, 46, 30, "RSpec/DescribeMethod: The second argument to describe should be the method being tested. '#instance' or '.class'.", 1360117347],
+    [14, 16, 28, "RSpec/DescribedClass: Use `described_class` instead of `Markdown::Merge::SmartMerger`.", 3119804521],
+    [34, 16, 28, "RSpec/DescribedClass: Use `described_class` instead of `Markdown::Merge::SmartMerger`.", 3119804521]
+  ],
+  "spec/markdown/merge/comment_behavior_matrix_spec.rb:2917192972": [
+    [6, 1, 89, "RSpec/SpecFilePathFormat: Spec path should end with `markdown/merge/smart_merger*comment_behavior_matrix*_spec.rb`.", 224692939],
+    [6, 46, 25, "RSpec/DescribeMethod: The second argument to describe should be the method being tested. '#instance' or '.class'.", 1921084705],
+    [12, 21, 28, "RSpec/DescribedClass: Use `described_class` instead of `Markdown::Merge::SmartMerger`.", 3119804521]
+  ]
+}
