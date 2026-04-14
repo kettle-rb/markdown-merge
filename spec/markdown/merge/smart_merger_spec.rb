@@ -220,6 +220,166 @@ RSpec.describe Markdown::Merge::SmartMerger do
       expect(merger.merge).to eq(template)
     end
 
+    it "keeps a template-only heading with its body instead of hijacking a destination section with the same body text" do
+      template = <<~MARKDOWN
+        ## New Heading
+
+        Shared content.
+
+        ## Existing Heading
+
+        Existing content.
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        ## Existing Heading
+
+        Shared content.
+
+        Existing content.
+      MARKDOWN
+
+      merger = described_class.new(
+        template,
+        destination,
+        preference: :template,
+        add_template_only_nodes: true,
+        backend: :markly,
+      )
+
+      expect(merger.merge).to eq(<<~MARKDOWN)
+        ## New Heading
+
+        Shared content.
+
+        ## Existing Heading
+
+        Shared content.
+
+        Existing content.
+      MARKDOWN
+    end
+
+    it "does not allow fuzzy body matches to cross heading ownership boundaries" do
+      template = <<~MARKDOWN
+        ## New Heading
+
+        New body.
+
+        ## Existing Heading
+
+        Stable content.
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        ## Existing Heading
+
+        Legacy body.
+
+        Stable content.
+      MARKDOWN
+
+      paragraph_refiner = lambda do |template_nodes, dest_nodes, _context|
+        template_paragraph = template_nodes.find { |node| node.respond_to?(:type) && node.type.to_sym == :paragraph }
+        dest_paragraph = dest_nodes.find { |node| node.respond_to?(:type) && node.type.to_sym == :paragraph }
+        next [] unless template_paragraph && dest_paragraph
+
+        [
+          Ast::Merge::MatchRefinerBase::MatchResult.new(
+            template_node: template_paragraph,
+            dest_node: dest_paragraph,
+            score: 0.9,
+            metadata: {},
+          ),
+        ]
+      end
+
+      merger = described_class.new(
+        template,
+        destination,
+        preference: :template,
+        add_template_only_nodes: true,
+        backend: :markly,
+        match_refiner: paragraph_refiner,
+      )
+
+      expect(merger.merge).to eq(<<~MARKDOWN)
+        ## New Heading
+
+        New body.
+
+        ## Existing Heading
+
+        Legacy body.
+
+        Stable content.
+      MARKDOWN
+    end
+
+    it "repairs a previously hijacked adjacent heading body instead of duplicating it" do
+      template = <<~MARKDOWN
+        ## Developer Certificate of Origin
+
+        This ensures that all contributions are properly licensed and attributed.
+
+        ## Help out!
+
+        Take a look at the open issues and pull requests, or use the gem and find something to improve.
+
+        Follow these instructions:
+
+        1. Join the Discord
+        2. Fork the repository
+
+        ## Executables vs Rake tasks
+      MARKDOWN
+
+      destination = <<~MARKDOWN
+        ## Help out!
+
+        ## Developer Certificate of Origin
+
+        This ensures that all contributions are properly licensed and attributed.
+
+        Follow these instructions:
+
+        1. Join the Discord
+        2. Fork the repository
+
+        ## Executables vs Rake tasks
+      MARKDOWN
+
+      paragraph_refiner = Ast::Merge::ContentMatchRefiner.new(
+        threshold: 0.8,
+        node_types: [:paragraph],
+      )
+      merger = described_class.new(
+        template,
+        destination,
+        preference: :template,
+        add_template_only_nodes: true,
+        backend: :markly,
+        inner_merge_lists: true,
+        match_refiner: Ast::Merge::CompositeMatchRefiner.new(
+          paragraph_refiner,
+          Markdown::Merge::ListMatchRefiner.new(threshold: 0.45),
+        ),
+      )
+
+      result = merger.merge
+      help_section = result[/^## Help out!\n+(.*?)(?=^## |\z)/m, 1]
+      dco_section = result[/^## Developer Certificate of Origin\n+(.*?)(?=^## |\z)/m, 1]
+
+      expect(result.scan("Take a look at the open issues").length).to eq(1)
+      expect(result.scan("Follow these instructions:").length).to eq(1)
+      expect(result.scan("Join the Discord").length).to eq(1)
+      expect(help_section).to include("Take a look at the open issues")
+      expect(help_section).to include("Follow these instructions:")
+      expect(help_section).to include("1. Join the Discord")
+      expect(dco_section).to include("This ensures that all contributions are properly licensed and attributed.")
+      expect(dco_section).not_to include("Follow these instructions:")
+    end
+
     it "removes destination-only sections when removal mode is enabled" do
       merger = described_class.new(template_content, dest_content, remove_template_missing_nodes: true)
       result = merger.merge

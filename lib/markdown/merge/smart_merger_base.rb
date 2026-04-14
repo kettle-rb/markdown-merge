@@ -323,6 +323,8 @@ module Markdown
       # @param problems [DocumentProblems] Problems collector to add to
       # @return [Array<String, DocumentProblems>] [transformed_content, problems]
       def apply_post_processing(content, problems)
+        content = collapse_cross_source_preamble_prefixes(content)
+
         # Apply whitespace normalization if enabled
         if @normalize_whitespace
           # Support both boolean and symbol modes
@@ -340,6 +342,49 @@ module Markdown
         end
 
         [content, problems]
+      end
+
+      STANDALONE_HTML_COMMENT_LINE_RE = /\A\s*<!--.*?-->\s*\z/.freeze
+
+      def collapse_cross_source_preamble_prefixes(content)
+        template_comments, = leading_standalone_comment_run(@template_analysis.source.to_s)
+        return content if template_comments.empty?
+
+        merged_comments, remainder = leading_standalone_comment_run(content)
+        return content if merged_comments.empty?
+
+        destination_specific_comments = merged_comments.reject { |line| template_comments.include?(line) }
+        return content if destination_specific_comments.empty?
+
+        remainder = remainder.sub(/\A(?:\s*\n)+/, "")
+        rebuilt = destination_specific_comments.join("\n")
+        return rebuilt if remainder.empty?
+
+        "#{rebuilt}\n\n#{remainder}"
+      end
+
+      def leading_standalone_comment_run(text)
+        lines = text.to_s.split("\n", -1)
+        comment_lines = []
+        index = 0
+
+        while index < lines.length
+          line = lines[index]
+          if line.strip.empty?
+            comment_lines << line if comment_lines.any?
+            index += 1
+            next
+          end
+
+          break unless STANDALONE_HTML_COMMENT_LINE_RE.match?(line)
+
+          comment_lines << line
+          index += 1
+        end
+
+        normalized_comment_lines = comment_lines.reject(&:empty?)
+        remainder = lines[index..]&.join("\n").to_s
+        [normalized_comment_lines, remainder]
       end
 
       # Process alignment entries and build result using OutputBuilder

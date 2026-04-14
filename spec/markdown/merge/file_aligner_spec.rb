@@ -152,6 +152,28 @@ RSpec.describe Markdown::Merge::FileAligner do
         expect(dest_only_indices).to all(be < template_only_index)
       end
     end
+
+    it "matches synthetic section label paragraphs across heading ownership boundaries" do
+      template_nodes = [double("TLabel", type: :paragraph, text: "GitHub API and CI helpers")]
+      dest_nodes = [
+        double("DHeading", type: :heading, text: "Existing"),
+        double("DLabel", type: :paragraph, text: "GitHub API and CI helpers"),
+      ]
+
+      template_analysis = double("TemplateAnalysis")
+      allow(template_analysis).to receive(:statements).and_return(template_nodes)
+      allow(template_analysis).to receive(:signature_at).with(0).and_return([:paragraph, "github-label"])
+
+      dest_analysis = double("DestAnalysis")
+      allow(dest_analysis).to receive(:statements).and_return(dest_nodes)
+      allow(dest_analysis).to receive(:signature_at).with(0).and_return([:heading, 2, "Existing"])
+      allow(dest_analysis).to receive(:signature_at).with(1).and_return([:paragraph, "github-label"])
+
+      aligner = described_class.new(template_analysis, dest_analysis)
+      result = aligner.align
+
+      expect(result).to include(hash_including(type: :match, template_index: 0, dest_index: 1))
+    end
   end
 
   describe "with match_refiner" do
@@ -187,6 +209,87 @@ RSpec.describe Markdown::Merge::FileAligner do
       # Should find a match via refiner
       matches = result.select { |e| e[:type] == :match }
       expect(matches.size).to eq(1)
+    end
+
+    it "rejects refined matches that cross heading ownership boundaries" do
+      template_nodes = [
+        double("THeadingNew", type: :heading),
+        double("TParagraphNew", type: :paragraph),
+        double("THeadingExisting", type: :heading),
+        double("TParagraphExisting", type: :paragraph),
+      ]
+      dest_nodes = [
+        double("DHeadingExisting", type: :heading),
+        double("DParagraphLegacy", type: :paragraph),
+        double("DParagraphExisting", type: :paragraph),
+      ]
+
+      template_analysis = double("TemplateAnalysis")
+      allow(template_analysis).to receive(:statements).and_return(template_nodes)
+      allow(template_analysis).to receive(:signature_at).with(0).and_return([:heading, 2, "New Heading"])
+      allow(template_analysis).to receive(:signature_at).with(1).and_return([:paragraph, "new-body"])
+      allow(template_analysis).to receive(:signature_at).with(2).and_return([:heading, 2, "Existing Heading"])
+      allow(template_analysis).to receive(:signature_at).with(3).and_return([:paragraph, "existing-body"])
+
+      dest_analysis = double("DestAnalysis")
+      allow(dest_analysis).to receive(:statements).and_return(dest_nodes)
+      allow(dest_analysis).to receive(:signature_at).with(0).and_return([:heading, 2, "Existing Heading"])
+      allow(dest_analysis).to receive(:signature_at).with(1).and_return([:paragraph, "legacy-body"])
+      allow(dest_analysis).to receive(:signature_at).with(2).and_return([:paragraph, "existing-body"])
+
+      match_result = double("MatchResult", template_node: template_nodes[1], dest_node: dest_nodes[1], score: 0.95)
+      refiner = double("Refiner")
+      allow(refiner).to receive(:call).and_return([match_result])
+
+      aligner = described_class.new(
+        template_analysis,
+        dest_analysis,
+        match_refiner: refiner,
+      )
+      result = aligner.align
+
+      expect(result).not_to include(hash_including(type: :match, template_index: 1, dest_index: 1))
+      expect(result).to include(hash_including(type: :match, template_index: 2, dest_index: 0))
+    end
+
+    it "allows refined list repair matches for synthetic label sections across heading ownership boundaries" do
+      template_list = double("TList", type: :list, text: "K_SOUP_COV_DO")
+      allow(template_list).to receive(:each)
+      template_nodes = [
+        double("TLabel", type: :paragraph, text: "Coverage (kettle-soup-cover / SimpleCov)"),
+        template_list,
+      ]
+      dest_list = double("DList", type: :list, text: "K_SOUP_COV_DO")
+      allow(dest_list).to receive(:each)
+      dest_nodes = [
+        double("DHeading", type: :heading, text: "Existing"),
+        double("DIntro", type: :paragraph, text: "Legacy intro"),
+        dest_list,
+      ]
+
+      template_analysis = double("TemplateAnalysis")
+      allow(template_analysis).to receive(:statements).and_return(template_nodes)
+      allow(template_analysis).to receive(:signature_at).with(0).and_return([:paragraph, "coverage-label"])
+      allow(template_analysis).to receive(:signature_at).with(1).and_return([:list, nil, 8])
+
+      dest_analysis = double("DestAnalysis")
+      allow(dest_analysis).to receive(:statements).and_return(dest_nodes)
+      allow(dest_analysis).to receive(:signature_at).with(0).and_return([:heading, 2, "Existing"])
+      allow(dest_analysis).to receive(:signature_at).with(1).and_return([:paragraph, "legacy-intro"])
+      allow(dest_analysis).to receive(:signature_at).with(2).and_return([:list, nil, 8])
+
+      match_result = double("MatchResult", template_node: template_nodes[1], dest_node: dest_nodes[2], score: 0.95)
+      refiner = double("Refiner")
+      allow(refiner).to receive(:call).and_return([match_result])
+
+      aligner = described_class.new(
+        template_analysis,
+        dest_analysis,
+        match_refiner: refiner,
+      )
+      result = aligner.align
+
+      expect(result).to include(hash_including(type: :match, template_index: 1, dest_index: 2))
     end
   end
 
@@ -342,7 +445,7 @@ RSpec.describe Markdown::Merge::FileAligner do
 
       expect(sig_map).to be_a(Hash)
       expect(sig_map.keys).to include([:heading, 1, "First"])
-      expect(sig_map.keys).to include([:paragraph, "second"])
+      expect(sig_map.keys).to include([:paragraph, [[:heading, 1, "First"]], "second"])
     end
   end
 end
