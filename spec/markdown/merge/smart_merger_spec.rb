@@ -709,6 +709,12 @@ RSpec.describe Markdown::Merge::SmartMerger do
   end
 
   describe "#merge_with_debug", :markdown_parsing do
+    let(:runtime_debug_merger) do
+      described_class.new(template_content, dest_content, inner_merge_code_blocks: true)
+    end
+
+    it_behaves_like "Ast::Merge::RuntimeDebugContract"
+
     it "returns content, debug info, and runtime data" do
       merger = described_class.new(template_content, dest_content, inner_merge_code_blocks: true)
       result = merger.merge_with_debug
