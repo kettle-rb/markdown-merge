@@ -276,10 +276,6 @@ RSpec.describe Markdown::Merge::LinkReferenceRehydrator do
   describe "real-world fixture" do
     let(:fixture_path) { File.expand_path("../../fixtures/01_cleanse/destination.md", __dir__) }
 
-    before do
-      skip "Fixture not available" unless File.exist?(fixture_path)
-    end
-
     it "does not lose content when rehydrating" do
       content = File.read(fixture_path)
 
