@@ -128,6 +128,24 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     end
   end
 
+  describe "#feature_profile", :markdown_parsing do
+    it "advertises Markdown logical owners and delegated code-block surfaces" do
+      analysis = described_class.new(simple_markdown)
+      profile = analysis.feature_profile
+
+      expect(profile.read_strategy).to eq(:source_augmented_portable_write)
+      expect(profile.attachment_strategy).to eq(:normalize_tracked_layout_merge)
+      expect(profile.comment_style).to eq(:html_comment)
+      expect(profile.logical_owners).to eq(link_definition: :preserve_if_referenced)
+      expect(profile.surfaces.map(&:to_h)).to eq(
+        [{name: :fenced_code_block, selector: :language_tag, metadata: {}}],
+      )
+      expect(profile.delegation_policies.map(&:to_h)).to eq(
+        [{surface_name: :fenced_code_block, strategy: :by_language, metadata: {}}],
+      )
+    end
+  end
+
   describe "shared layout compliance", :markdown_parsing do
     let(:layout_markdown) do
       <<~MARKDOWN

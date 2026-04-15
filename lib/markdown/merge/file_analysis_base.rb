@@ -184,6 +184,24 @@ module Markdown
         :normalize_tracked_layout_merge
       end
 
+      def ruleset_logical_owners
+        {
+          link_definition: :preserve_if_referenced,
+        }
+      end
+
+      def ruleset_surfaces
+        [
+          {name: :fenced_code_block, selector: :language_tag},
+        ]
+      end
+
+      def ruleset_delegation_policies
+        [
+          {surface_name: :fenced_code_block, strategy: :by_language},
+        ]
+      end
+
       # Build a passive shared comment augmenter for this analysis.
       #
       # @param owners [Array, nil] Owners used for attachment inference
