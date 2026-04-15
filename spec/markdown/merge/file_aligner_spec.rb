@@ -424,6 +424,22 @@ RSpec.describe Markdown::Merge::FileAligner do
         expect(executables_match[:dest_index]).to eq(4)
       end
     end
+
+    it "matches list anchors despite leading emoji in the first destination item", :markly_merge do
+      template_analysis = Markdown::Merge::FileAnalysis.new(
+        "- Item A\n- Item B\n",
+        backend: :markly,
+      )
+      dest_analysis = Markdown::Merge::FileAnalysis.new(
+        "- 🪙 Item A\n- Item B\n- Item C\n",
+        backend: :markly,
+      )
+
+      aligner = described_class.new(template_analysis, dest_analysis)
+      result = aligner.align
+
+      expect(result).to include(hash_including(type: :match, template_index: 0, dest_index: 0))
+    end
   end
 
   describe "#build_signature_map (private)" do

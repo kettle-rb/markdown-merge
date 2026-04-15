@@ -1667,7 +1667,6 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
 
     it "handles emoji in list items without duplication" do
-      pending "requires ast-merge byteslice fix to propagate through markly-merge backend"
       template = "- Item A\n- Item B\n"
       destination = "- 🪙 Item A\n- Item B\n- Item C\n"
       merger = described_class.new(template, destination, backend: :markly, preference: :destination, add_template_only_nodes: true)

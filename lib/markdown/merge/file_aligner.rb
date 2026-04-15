@@ -483,8 +483,10 @@ module Markdown
         text
           .strip
           .sub(/\A(?:[-*+]|\d+\.)\s+/, "")
+          .gsub(/[^\p{L}\p{N}]+/u, " ")
           .gsub(/\s+/, " ")
           .downcase
+          .strip
       end
     end
   end
