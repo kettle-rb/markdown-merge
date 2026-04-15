@@ -315,6 +315,28 @@ module Markdown
         end
       end
 
+      # Perform the merge and return a hash with content, debug info, and runtime data.
+      #
+      # @return [Hash] Hash with :content, :debug, :runtime, and :statistics keys
+      def merge_with_debug
+        result = merge_result
+
+        {
+          content: result.content,
+          debug: {
+            template_statements: @template_analysis&.statements&.size || 0,
+            dest_statements: @dest_analysis&.statements&.size || 0,
+            preference: @preference,
+            add_template_only_nodes: @add_template_only_nodes,
+            remove_template_missing_nodes: @remove_template_missing_nodes,
+            runtime_operation_count: runtime_session&.operations&.size || 0,
+            runtime_diagnostic_count: runtime_session&.diagnostics&.size || 0,
+          },
+          runtime: runtime_session&.to_h,
+          statistics: result.stats,
+        }
+      end
+
       # Get merge statistics (convenience method).
       #
       # @return [Hash] Statistics from the merge result

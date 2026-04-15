@@ -708,6 +708,51 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
+  describe "#merge_with_debug", :markdown_parsing do
+    it "returns content, debug info, and runtime data" do
+      merger = described_class.new(template_content, dest_content, inner_merge_code_blocks: true)
+      result = merger.merge_with_debug
+
+      expect(result).to include(:content, :debug, :runtime, :statistics)
+      expect(result[:content]).to be_a(String)
+      expect(result[:debug]).to include(
+        :template_statements,
+        :dest_statements,
+        :preference,
+        :add_template_only_nodes,
+        :remove_template_missing_nodes,
+        :runtime_operation_count,
+        :runtime_diagnostic_count,
+      )
+      expect(result[:runtime]).to include(:operations, :diagnostics, :metadata, :policy_context)
+      expect(result[:statistics]).to be_a(Hash)
+    end
+
+    it "includes runtime counts when code block delegation is active" do
+      template = <<~MARKDOWN
+        # Example
+
+        ```custom
+        shared value
+        ```
+      MARKDOWN
+      destination = template
+      code_block_merger = Markdown::Merge::CodeBlockMerger.new(
+        mergers: {
+          "custom" => ->(template_content, dest_content, _preference, **) {
+            {merged: true, content: dest_content, stats: {decision: :identical}}
+          },
+        },
+      )
+      merger = described_class.new(template, destination, inner_merge_code_blocks: code_block_merger)
+
+      result = merger.merge_with_debug
+
+      expect(result.dig(:debug, :runtime_operation_count)).to be >= 1
+      expect(result.dig(:runtime, :operations)).not_to be_empty
+    end
+  end
+
   describe "preference: :template", :markdown_parsing do
     # Preference determines which source to use when nodes MATCH.
     # - preference: :destination (default) - use destination's version of matched nodes
