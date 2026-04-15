@@ -63,6 +63,7 @@ module Markdown
 
       # @return [Ast::Merge::Runtime::Session, nil] Runtime session for this merge
       attr_reader :runtime_session
+      attr_reader :corruption_handling
 
       # Creates a new SmartMerger for intelligent Markdown file merging.
       #
@@ -153,6 +154,7 @@ module Markdown
         inner_merge_code_blocks: false,
         inner_merge_lists: false,
         remove_template_missing_nodes: false,
+        corruption_handling: :heal,
         freeze_token: FileAnalysisBase::DEFAULT_FREEZE_TOKEN,
         match_refiner: nil,
         node_typing: nil,
@@ -163,6 +165,7 @@ module Markdown
         @preference = preference
         @add_template_only_nodes = add_template_only_nodes
         @remove_template_missing_nodes = remove_template_missing_nodes
+        @corruption_handling = ::Ast::Merge::Healer.normalize_mode(corruption_handling)
         @match_refiner = match_refiner || default_match_refiner(inner_merge_lists: inner_merge_lists)
         @node_typing = node_typing
         @normalize_whitespace = normalize_whitespace
@@ -329,6 +332,7 @@ module Markdown
             preference: @preference,
             add_template_only_nodes: @add_template_only_nodes,
             remove_template_missing_nodes: @remove_template_missing_nodes,
+            corruption_handling: @corruption_handling,
             runtime_operation_count: runtime_session&.operations&.size || 0,
             runtime_diagnostic_count: runtime_session&.diagnostics&.size || 0,
           },
@@ -378,6 +382,7 @@ module Markdown
           options: {
             inner_merge_code_blocks: !@code_block_merger.nil?,
             inner_merge_lists: !@list_merger.nil?,
+            corruption_handling: @corruption_handling,
           },
         )
         @runtime_session.register(
@@ -419,6 +424,7 @@ module Markdown
           preference: @preference,
           add_template_only_nodes: @add_template_only_nodes,
           remove_template_missing_nodes: @remove_template_missing_nodes,
+          corruption_handling: @corruption_handling,
         }
       end
 
@@ -506,6 +512,22 @@ module Markdown
 
         destination_specific_comments = merged_comments.reject { |line| template_comments.include?(line) }
         return content if destination_specific_comments.empty?
+
+        should_heal = ::Ast::Merge::Healer.handle(
+          mode: @corruption_handling,
+          kind: :duplicate_template_preamble_prefix,
+          message: "merged Markdown preamble begins with duplicated template-owned standalone comment lines",
+          prefix: "[markdown-merge]",
+          error_class: Markdown::Merge::CorruptionDetectedError,
+          warner: lambda { |formatted|
+            DebugLogger.debug_warning(formatted, {
+              template_comment_lines: template_comments.length,
+              merged_comment_lines: merged_comments.length,
+              destination_specific_comment_lines: destination_specific_comments.length,
+            })
+          },
+        )
+        return content unless should_heal
 
         remainder = remainder.sub(/\A(?:\s*\n)+/, "")
         rebuilt = destination_specific_comments.join("\n")

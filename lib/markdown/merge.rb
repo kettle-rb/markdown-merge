@@ -99,6 +99,8 @@ module Markdown
     #   end
     class DestinationParseError < ParseError; end
 
+    class CorruptionDetectedError < Error; end
+
     # Autoload all components - base classes
     autoload :Cleanse, "markdown/merge/cleanse"
     autoload :CommentTracker, "markdown/merge/comment_tracker"

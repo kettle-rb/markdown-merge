@@ -727,11 +727,13 @@ RSpec.describe Markdown::Merge::SmartMerger do
         :preference,
         :add_template_only_nodes,
         :remove_template_missing_nodes,
+        :corruption_handling,
         :runtime_operation_count,
         :runtime_diagnostic_count,
       )
       expect(result[:runtime]).to include(:operations, :diagnostics, :metadata, :policy_context)
       expect(result[:statistics]).to be_a(Hash)
+      expect(result.dig(:debug, :corruption_handling)).to eq(:heal)
     end
 
     it "includes runtime counts when code block delegation is active" do
@@ -756,6 +758,77 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
       expect(result.dig(:debug, :runtime_operation_count)).to be >= 1
       expect(result.dig(:runtime, :operations)).not_to be_empty
+    end
+  end
+
+  describe "duplicate template preamble healing", :markdown_parsing do
+    let(:template_content) do
+      <<~MARKDOWN
+        <!-- Shared header -->
+
+        [alpha]: https://template.example.test
+      MARKDOWN
+    end
+
+    let(:destination_content) do
+      <<~MARKDOWN
+        <!-- Shared header -->
+        <!-- Shared header -->
+        <!-- Destination header -->
+        [alpha]: https://destination.example.test
+      MARKDOWN
+    end
+
+    it "collapses the duplicated template prefix in heal mode" do
+      merged = described_class.new(
+        template_content,
+        destination_content,
+        add_template_only_nodes: true,
+      ).merge
+
+      expect(merged.lines.grep("<!-- Shared header -->\n").size).to eq(0)
+      expect(merged.lines.grep("<!-- Destination header -->\n").size).to eq(1)
+      expect(merged).to include("[alpha]: https://destination.example.test")
+    end
+
+    it "preserves the duplicated prefix in skip mode" do
+      merged = described_class.new(
+        template_content,
+        destination_content,
+        add_template_only_nodes: true,
+        corruption_handling: :skip,
+      ).merge
+
+      expect(merged.lines.grep("<!-- Shared header -->\n").size).to eq(2)
+      expect(merged.lines.grep("<!-- Destination header -->\n").size).to eq(1)
+    end
+
+    it "warns and preserves the duplicated prefix in warn mode" do
+      allow(Markdown::Merge::DebugLogger).to receive(:debug_warning)
+
+      merged = described_class.new(
+        template_content,
+        destination_content,
+        add_template_only_nodes: true,
+        corruption_handling: :warn,
+      ).merge
+
+      expect(Markdown::Merge::DebugLogger).to have_received(:debug_warning).with(
+        /Suspected corruption \(duplicate_template_preamble_prefix\)/,
+        hash_including(template_comment_lines: 1, merged_comment_lines: 3, destination_specific_comment_lines: 1),
+      )
+      expect(merged.lines.grep("<!-- Shared header -->\n").size).to eq(2)
+    end
+
+    it "raises in error mode" do
+      expect {
+        described_class.new(
+          template_content,
+          destination_content,
+          add_template_only_nodes: true,
+          corruption_handling: :error,
+        ).merge
+      }.to raise_error(Markdown::Merge::CorruptionDetectedError, /duplicate_template_preamble_prefix/)
     end
   end
 
