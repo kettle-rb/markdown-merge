@@ -40,7 +40,7 @@ RSpec.describe Markdown::Merge::SmartMerger, "comment behavior complements", :ma
       expect(result).to eq(template)
     end
 
-    it "keeps the file preamble separate in the augmenter even when the first block attachment coalesces it" do
+    it "keeps the file preamble separate from floating first-owner docs through the wrapper attachment" do
       source = <<~MARKDOWN
         <!-- Document header -->
 
@@ -55,8 +55,9 @@ RSpec.describe Markdown::Merge::SmartMerger, "comment behavior complements", :ma
       augmenter = analysis.comment_augmenter(owners: [heading])
 
       expect(augmenter.preamble_region&.normalized_content).to eq("Document header")
-      expect(attachment.leading_region&.normalized_content).to eq("Document header\nAlpha docs")
-      expect(attachment.leading_region).not_to be_floating
+      expect(attachment.leading_region&.normalized_content).to eq("Alpha docs")
+      expect(attachment.leading_region).to be_floating
+      expect(attachment.leading_gap&.kind).to eq(:interstitial)
     end
 
     it "attaches later block-owner docs directly with their interstitial gap metadata" do
@@ -73,7 +74,7 @@ RSpec.describe Markdown::Merge::SmartMerger, "comment behavior complements", :ma
       attachment = analysis.comment_attachment_for(paragraph)
 
       expect(attachment.leading_region&.normalized_content).to eq("Beta docs")
-      expect(attachment.leading_region).not_to be_floating
+      expect(attachment.leading_region).to be_floating
       expect(attachment.leading_gap&.kind).to eq(:interstitial)
       expect(attachment.leading_gap&.start_line).to eq(4)
       expect(attachment.leading_gap&.end_line).to eq(4)

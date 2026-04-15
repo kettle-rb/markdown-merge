@@ -37,12 +37,6 @@ module Markdown
 
         nil
       end
-
-      # Markdown standalone HTML comments intentionally remain attachable to the
-      # first block even when they start at line 1 and are separated by a gap.
-      def strip_preamble(comments, _node_line)
-        comments
-      end
     end
   end
 end

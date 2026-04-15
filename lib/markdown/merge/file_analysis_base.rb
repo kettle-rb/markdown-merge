@@ -170,16 +170,18 @@ module Markdown
       # @param options [Hash] Additional metadata / lookup overrides
       # @return [Object]
       def comment_attachment_for(owner, **options)
+        augmented_attachment = comment_augmenter(**options).attachment_for(owner)
+
         shared_comment_attachment_for(
           owner,
-          tracker_attachment: comment_tracker.comment_attachment_for(owner, **options),
+          tracker_attachment: augmented_attachment || comment_tracker.comment_attachment_for(owner, **options),
           **options,
         )
       end
 
       # @return [Symbol]
       def comment_attachment_strategy
-        :tracker_layout_merge
+        :normalize_tracked_layout_merge
       end
 
       # Build a passive shared comment augmenter for this analysis.
@@ -394,8 +396,18 @@ module Markdown
 
       def comment_augmenter_default_owners
         @comment_augmenter_default_owners ||= @statements.select do |statement|
-          statement.respond_to?(:source_position) && statement.source_position
+          statement.respond_to?(:source_position) && statement.source_position &&
+            (!statement.respond_to?(:merge_type) || statement.merge_type != :gap_line) &&
+            !standalone_comment_statement?(statement)
         end
+      end
+
+      def standalone_comment_statement?(statement)
+        pos = statement.respond_to?(:source_position) ? statement.source_position : nil
+        return false unless pos
+        return false unless pos[:start_line] && pos[:end_line] && pos[:start_line] == pos[:end_line]
+
+        comment_tracker.comment_node_at(pos[:start_line])
       end
 
       # Extract all nodes and integrate freeze blocks
