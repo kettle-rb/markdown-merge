@@ -1,4 +1,7 @@
 {
+  "lib/markdown/merge/file_aligner.rb:1200791912": [
+    [141, 36, 16, "Style/RedundantEach: Use `with_object` to remove redundant `each`.", 4071736605]
+  ],
   "spec/markdown/merge/comment_behavior_complements_spec.rb:1604334868": [
     [3, 1, 94, "RSpec/SpecFilePathFormat: Spec path should end with `markdown/merge/smart_merger*comment_behavior_complements*_spec.rb`.", 1090409225],
     [3, 46, 30, "RSpec/DescribeMethod: The second argument to describe should be the method being tested. '#instance' or '.class'.", 1360117347],

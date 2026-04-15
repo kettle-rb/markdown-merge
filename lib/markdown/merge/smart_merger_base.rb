@@ -344,7 +344,7 @@ module Markdown
         [content, problems]
       end
 
-      STANDALONE_HTML_COMMENT_LINE_RE = /\A\s*<!--.*?-->\s*\z/.freeze
+      STANDALONE_HTML_COMMENT_LINE_RE = /\A\s*<!--.*?-->\s*\z/
 
       def collapse_cross_source_preamble_prefixes(content)
         template_comments, = leading_standalone_comment_run(@template_analysis.source.to_s)
