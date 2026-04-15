@@ -581,6 +581,37 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       end
     end
 
+    describe "Markdown code blocks" do
+      let(:merger) { described_class.new }
+
+      it "merges valid Markdown code" do
+        template_node = create_code_node(language: "markdown", content: "## Nested\n\ntemplate text\n")
+        dest_node = create_code_node(language: "markdown", content: "## Nested\n\ndestination text\n")
+
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:content]).to include("```markdown")
+      end
+
+      it "supports md alias" do
+        template_node = create_code_node(language: "md", content: "template text\n")
+        dest_node = create_code_node(language: "md", content: "destination text\n")
+
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:content]).to include("```md")
+      end
+
+      it "returns nested runtime metadata" do
+        template_node = create_code_node(language: "markdown", content: "## Nested\n\ntemplate text\n")
+        dest_node = create_code_node(language: "markdown", content: "## Nested\n\ndestination text\n")
+
+        result = merger.merge_code_blocks(template_node, dest_node, preference: :destination)
+        expect(result[:merged]).to be(true)
+        expect(result[:metadata]).to include(:nested_runtime_session)
+      end
+    end
+
     describe "TOML code blocks", :toml_merge do
       let(:merger) { described_class.new }
 
@@ -615,7 +646,7 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       node
     end
 
-    %w[ruby rb yaml yml json toml].each do |lang|
+    %w[ruby rb yaml yml json markdown md toml].each do |lang|
       context "with #{lang} language" do
         it "has a merger defined" do
           expect(described_class::DEFAULT_MERGERS).to have_key(lang)

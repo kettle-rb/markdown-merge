@@ -61,6 +61,16 @@ module Markdown
           CodeBlockMerger.merge_with_json(template, dest, preference, **opts)
         },
 
+        # Markdown code blocks
+        "markdown" => ->(template, dest, preference, **opts) {
+          require "markdown/merge"
+          CodeBlockMerger.merge_with_markdown(template, dest, preference, **opts)
+        },
+        "md" => ->(template, dest, preference, **opts) {
+          require "markdown/merge"
+          CodeBlockMerger.merge_with_markdown(template, dest, preference, **opts)
+        },
+
         # TOML code blocks
         "toml" => ->(template, dest, preference, **opts) {
           require "toml/merge"
@@ -305,7 +315,7 @@ module Markdown
               language: operation.surface.effective_language,
               delegate_name: operation.delegate_name,
               session_policy: session.policy_context,
-            },
+            }.merge(result[:metadata] || {}),
           )
         else
           operation.add_diagnostic(
@@ -333,7 +343,7 @@ module Markdown
               language: operation.surface.effective_language,
               delegate_name: operation.delegate_name,
               session_policy: session.policy_context,
-            },
+            }.merge(result[:metadata] || {}),
           )
         end
       end
@@ -353,15 +363,19 @@ module Markdown
         end
 
         begin
-          result = merger.call(template_content, dest_content, preference, **opts)
+          result = merger.call(template_content, dest_content, preference, nested_mergers: @mergers, **opts)
           if result[:merged]
             {
               merged: true,
               content: rebuild_code_block(language, result[:content], reference_node),
               stats: result[:stats] || {},
+              metadata: result[:metadata] || {},
             }
           else
-            not_merged(result[:reason] || "merger declined")
+            not_merged(result[:reason] || "merger declined").merge(
+              stats: result[:stats] || {},
+              metadata: result[:metadata] || {},
+            )
           end
         rescue LoadError => e
           not_merged("merger gem not available: #{e.message}")
@@ -516,6 +530,35 @@ module Markdown
             merged: true,
             content: merger.merge,
             stats: merger.stats,
+          }
+        end
+
+        # Merge Markdown code using markdown-merge.
+        #
+        # @param template [String] Template Markdown code
+        # @param dest [String] Destination Markdown code
+        # @param preference [Symbol] :destination or :template
+        # @return [Hash] Merge result
+        def merge_with_markdown(template, dest, preference, **opts)
+          nested_code_block_merger = CodeBlockMerger.new(
+            mergers: opts.fetch(:nested_mergers, {}),
+            enabled: opts.fetch(:inner_merge_code_blocks, true),
+          )
+          merger = ::Markdown::Merge::SmartMerger.new(
+            template,
+            dest,
+            preference: preference,
+            add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            inner_merge_code_blocks: nested_code_block_merger,
+          )
+
+          {
+            merged: true,
+            content: merger.merge,
+            stats: merger.stats,
+            metadata: {
+              nested_runtime_session: merger.runtime_session&.to_h,
+            },
           }
         end
 

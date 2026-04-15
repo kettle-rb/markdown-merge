@@ -614,6 +614,75 @@ RSpec.describe Markdown::Merge::SmartMerger do
       expect(child_operation.surface.effective_language).to eq(:custom)
       expect(child_operation.result.metadata[:stats]).to include(decision: :identical)
     end
+
+    it "captures nested runtime metadata for fenced markdown recursion" do
+      template = <<~MARKDOWN
+        # Example
+
+        ````markdown
+        ## Nested
+
+        Template intro.
+
+        ```custom
+        shared value
+        ```
+        ````
+      MARKDOWN
+      destination = <<~MARKDOWN
+        # Example
+
+        ````markdown
+        ## Nested
+
+        Destination intro.
+
+        ```custom
+        shared value
+        ```
+        ````
+      MARKDOWN
+      code_block_merger = Markdown::Merge::CodeBlockMerger.new(
+        mergers: {
+          "custom" => ->(template_content, dest_content, _preference, **) {
+            {
+              merged: true,
+              content: "#{dest_content}\n# nested custom merge\n#{template_content}",
+              stats: {decision: :modified},
+            }
+          },
+        },
+      )
+      merger = described_class.new(
+        template,
+        destination,
+        inner_merge_code_blocks: code_block_merger,
+        signature_generator: lambda { |node|
+          if node.respond_to?(:type) && node.type.to_s == "code_block"
+            [:code_block, node.fence_info]
+          else
+            node
+          end
+        },
+      )
+
+      result = merger.merge
+      outer_child = merger.runtime_session.operations.find do |operation|
+        operation.surface.surface_kind == :markdown_fenced_code_block &&
+          operation.surface.effective_language == :markdown
+      end
+      nested_runtime = outer_child&.result&.metadata&.dig(:nested_runtime_session)
+      nested_child = Array(nested_runtime && nested_runtime[:operations]).find do |operation|
+        operation.dig(:surface, :surface_kind) == :markdown_fenced_code_block &&
+          operation.dig(:surface, :effective_language) == :custom
+      end
+
+      expect(result).to include("Destination intro.")
+      expect(outer_child).not_to be_nil
+      expect(nested_runtime).not_to be_nil
+      expect(nested_child).not_to be_nil
+      expect(nested_child.dig(:result, :metadata, :stats, :decision)).to eq(:identical)
+    end
   end
 
   describe "#merge_result", :markdown_parsing do
