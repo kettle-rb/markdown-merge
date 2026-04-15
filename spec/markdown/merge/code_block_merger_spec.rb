@@ -103,12 +103,42 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
     end
   end
 
-  describe "#merge_code_blocks" do
-    def create_code_node(language:, content:)
+    describe "#merge_code_blocks" do
+    def create_code_node(language:, content:, start_line: nil, end_line: nil)
       node = double("CodeBlock")
       allow(node).to receive_messages(fence_info: language, string_content: content)
       allow(node).to receive(:respond_to?).with(:fence_info).and_return(true)
+      allow(node).to receive(:respond_to?).with(:source_position).and_return(!start_line.nil? && !end_line.nil?)
+      allow(node).to receive(:source_position).and_return({start_line: start_line, end_line: end_line}) if start_line && end_line
       node
+    end
+
+    def build_runtime_session(runtime_merger = merger)
+      surface = Ast::Merge::Runtime::Surface.new(
+        surface_kind: :markdown_document,
+        declared_language: :markdown,
+        effective_language: :markdown,
+        address: "document[0]",
+      )
+      operation = Ast::Merge::Runtime::Operation.new(
+        operation_id: "markdown-document-root",
+        surface: surface,
+        template_fragment: "# Template\n",
+        destination_fragment: "# Destination\n",
+      )
+      session = Ast::Merge::Runtime::Session.new(
+        delegation_registry: Ast::Merge::Runtime::DelegationRegistry.new(delegates: runtime_merger.runtime_delegates),
+      )
+      session.register(
+        operation,
+        frame: Ast::Merge::Runtime::Frame.new(
+          operation_id: operation.operation_id,
+          depth: 0,
+          surface_path: surface.address,
+          language_chain: [:markdown],
+        ),
+      )
+      [session, operation]
     end
 
     context "when disabled" do
@@ -155,20 +185,57 @@ RSpec.describe Markdown::Merge::CodeBlockMerger do
       end
     end
 
-    context "with identical content" do
-      it "returns merged with identical decision" do
-        content = "puts 'hello'"
+      context "with identical content" do
+        it "returns merged with identical decision" do
+          content = "puts 'hello'"
         template = create_code_node(language: "ruby", content: content)
         dest = create_code_node(language: "ruby", content: content)
 
         result = merger.merge_code_blocks(template, dest, preference: :destination)
         expect(result[:merged]).to be(true)
         expect(result[:stats][:decision]).to eq(:identical)
+        end
       end
-    end
 
-    context "with supported language but missing gem" do
-      it "handles LoadError gracefully" do
+      context "with runtime session" do
+        it "registers and completes a fenced-code child operation" do
+          runtime_merger = described_class.new(
+            mergers: {
+              "custom" => ->(template_content, dest_content, _preference, **) {
+                {
+                  merged: true,
+                  content: "#{dest_content}\n# merged\n#{template_content}",
+                  stats: {decision: :modified},
+                }
+              },
+            },
+          )
+          template = create_code_node(language: "custom", content: "template value", start_line: 3, end_line: 5)
+          dest = create_code_node(language: "custom", content: "destination value", start_line: 3, end_line: 5)
+          session, parent_operation = build_runtime_session(runtime_merger)
+
+          result = runtime_merger.merge_code_blocks(
+            template,
+            dest,
+            preference: :destination,
+            runtime_session: session,
+            parent_operation: parent_operation,
+          )
+
+          expect(result[:merged]).to be(true)
+          child_operation = session.operation(result[:runtime_operation_id])
+          expect(child_operation).not_to be_nil
+          expect(child_operation).to be_completed
+          expect(child_operation.surface.surface_kind).to eq(:markdown_fenced_code_block)
+          expect(child_operation.surface.address).to include("fenced_code_block")
+          expect(child_operation.surface.effective_language).to eq(:custom)
+          expect(child_operation.result.metadata[:merged]).to be(true)
+          expect(parent_operation.children).to include(child_operation)
+        end
+      end
+
+      context "with supported language but missing gem" do
+        it "handles LoadError gracefully" do
         template = create_code_node(language: "toml", content: "key = 'value1'")
         dest = create_code_node(language: "toml", content: "key = 'value2'")
 

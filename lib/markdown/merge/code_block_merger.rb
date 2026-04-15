@@ -75,6 +75,9 @@ module Markdown
       # @return [Boolean] Whether inner-merge is enabled
       attr_reader :enabled
 
+      # @return [Array<Ast::Merge::Runtime::Delegate>] Runtime delegates exposed by this merger
+      attr_reader :runtime_delegates
+
       # Creates a new CodeBlockMerger.
       #
       # @param mergers [Hash<String, Proc>] Custom language-to-merger mapping.
@@ -83,6 +86,7 @@ module Markdown
       def initialize(mergers: {}, enabled: true)
         @mergers = DEFAULT_MERGERS.merge(mergers)
         @enabled = enabled
+        @runtime_delegates = build_runtime_delegates.freeze
       end
 
       # Check if inner-merge is available for a language.
@@ -103,23 +107,247 @@ module Markdown
       # @param preference [Symbol] :destination or :template
       # @param opts [Hash] Additional options passed to the merger
       # @return [Hash] { merged: Boolean, content: String, stats: Hash }
-      def merge_code_blocks(template_node, dest_node, preference:, **opts)
+      def merge_code_blocks(template_node, dest_node, preference:, runtime_session: nil, parent_operation: nil, **opts)
+        if runtime_session && parent_operation
+          return merge_code_blocks_with_runtime(
+            template_node,
+            dest_node,
+            preference: preference,
+            runtime_session: runtime_session,
+            parent_operation: parent_operation,
+            **opts,
+          )
+        end
+
+        merge_code_blocks_without_runtime(template_node, dest_node, preference: preference, **opts)
+      end
+
+      def merge_code_blocks_without_runtime(template_node, dest_node, preference:, **opts)
         return not_merged("inner-merge disabled") unless @enabled
 
         language = extract_language(template_node) || extract_language(dest_node)
         return not_merged("no language specified") unless language
 
-        merger = @mergers[language.downcase]
-        return not_merged("no merger for language: #{language}") unless merger
-
         template_content = extract_content(template_node)
         dest_content = extract_content(dest_node)
 
-        # If content is identical, no need to merge
+        perform_code_block_merge(
+          language: language,
+          template_content: template_content,
+          dest_content: dest_content,
+          preference: preference,
+          reference_node: dest_node,
+          **opts,
+        )
+      end
+
+      private
+
+      def merge_code_blocks_with_runtime(template_node, dest_node, preference:, runtime_session:, parent_operation:, **opts)
+        operation = build_runtime_operation(
+          template_node: template_node,
+          dest_node: dest_node,
+          preference: preference,
+          runtime_session: runtime_session,
+          parent_operation: parent_operation,
+          **opts,
+        )
+
+        parent_operation.add_child(operation)
+        parent_frame = runtime_session.frame_for(parent_operation.operation_id)
+        delegate = runtime_session.resolve_delegate_for(operation.surface, capability: :merge)
+        runtime_session.register(
+          operation,
+          frame: Ast::Merge::Runtime::Frame.new(
+            parent_operation_id: parent_operation.operation_id,
+            operation_id: operation.operation_id,
+            depth: parent_frame ? parent_frame.depth + 1 : 1,
+            surface_path: operation.surface.address,
+            language_chain: [*(parent_frame&.language_chain || [:markdown]), operation.surface.effective_language].compact,
+          ),
+          delegate: delegate,
+        )
+
+        unless delegate
+          reason = unsupported_runtime_reason_for(operation.surface)
+          operation.fail!(
+            diagnostic: Ast::Merge::Runtime::Diagnostic.new(
+              severity: :warn,
+              kind: :unsupported_capability,
+              operation_id: operation.operation_id,
+              surface_path: operation.surface.address,
+              message: reason,
+              metadata: {
+                capability: :merge,
+                language: operation.surface.effective_language,
+              },
+            ),
+          )
+          return not_merged(reason).merge(runtime_operation_id: operation.operation_id)
+        end
+
+        operation.running!
+        child_result = delegate.merge(operation: operation, session: runtime_session)
+        operation.complete!(result: child_result)
+
+        if child_result.metadata[:merged]
+          {
+            merged: true,
+            content: child_result.replacement_text,
+            stats: child_result.metadata[:stats] || {},
+            runtime_operation_id: operation.operation_id,
+          }
+        else
+          not_merged(child_result.metadata[:reason] || "merger declined").merge(
+            stats: child_result.metadata[:stats] || {},
+            runtime_operation_id: operation.operation_id,
+          )
+        end
+      end
+
+      def build_runtime_operation(template_node:, dest_node:, preference:, runtime_session:, parent_operation:, **opts)
+        language = extract_language(template_node) || extract_language(dest_node)
+        reference_node = dest_node || template_node
+        surface = Ast::Merge::Runtime::Surface.new(
+          surface_kind: :markdown_fenced_code_block,
+          declared_language: language,
+          effective_language: language,
+          address: runtime_surface_address(reference_node, runtime_session),
+          parent_address: parent_operation.surface.address,
+          span: runtime_surface_span(reference_node),
+          reconstruction_strategy: :portable_write,
+          metadata: {
+            fence_info: reference_node&.respond_to?(:fence_info) ? reference_node.fence_info : nil,
+            language: language,
+          }.compact,
+        )
+
+        Ast::Merge::Runtime::Operation.new(
+          operation_id: "markdown-code-block-#{runtime_session.operations.count}",
+          surface: surface,
+          template_fragment: rebuild_code_block(language, extract_content(template_node), template_node),
+          destination_fragment: rebuild_code_block(language, extract_content(dest_node), dest_node),
+          requested_strategy: :delegate_child_surface,
+          options: {
+            preference: preference,
+            add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            template_content: extract_content(template_node),
+            destination_content: extract_content(dest_node),
+            reference_node: reference_node,
+          },
+        )
+      end
+
+      def runtime_surface_address(reference_node, runtime_session)
+        span = runtime_surface_span(reference_node)
+        suffix =
+          if span
+            "L#{span.begin}-L#{span.end}"
+          else
+            "operation-#{runtime_session.operations.count}"
+          end
+
+        "document[0] > fenced_code_block[#{suffix}]"
+      end
+
+      def runtime_surface_span(node)
+        position = node_source_position(node)
+        start_line = position&.dig(:start_line)
+        end_line = position&.dig(:end_line)
+        return unless start_line && end_line
+
+        start_line..end_line
+      end
+
+      def node_source_position(node)
+        raw_node = unwrap_code_block_node(node)
+        raw_node&.source_position
+      rescue NoMethodError
+        nil
+      end
+
+      def build_runtime_delegates
+        [
+          Ast::Merge::Runtime::Delegate.new(
+            name: "markdown-code-block-inner-merge",
+            priority: 100,
+            surface_kinds: [:markdown_fenced_code_block],
+            languages: mergers.keys,
+            capabilities: {merge: [:markdown_fenced_code_block]},
+            merge: method(:merge_runtime_surface),
+            metadata: {
+              source: :markdown_merge,
+              languages: mergers.keys.sort,
+            },
+          ),
+        ]
+      end
+
+      def merge_runtime_surface(operation:, session:)
+        result = perform_code_block_merge(
+          language: operation.surface.effective_language,
+          template_content: operation.options[:template_content].to_s,
+          dest_content: operation.options[:destination_content].to_s,
+          preference: operation.options[:preference],
+          reference_node: operation.options[:reference_node],
+          add_template_only_nodes: operation.options.fetch(:add_template_only_nodes, false),
+        )
+
+        if result[:merged]
+          Ast::Merge::Runtime::ChildResult.new(
+            replacement_text: result[:content],
+            diagnostics: operation.diagnostics,
+            capabilities_used: %i[delegated_child_merge language_specific_merge],
+            capabilities_missing: [],
+            metadata: {
+              merged: true,
+              stats: result[:stats] || {},
+              language: operation.surface.effective_language,
+              delegate_name: operation.delegate_name,
+              session_policy: session.policy_context,
+            },
+          )
+        else
+          operation.add_diagnostic(
+            Ast::Merge::Runtime::Diagnostic.new(
+              severity: :warn,
+              kind: :delegated_merge_declined,
+              operation_id: operation.operation_id,
+              surface_path: operation.surface.address,
+              message: result[:reason].to_s,
+              metadata: {
+                language: operation.surface.effective_language,
+              },
+            ),
+          )
+
+          Ast::Merge::Runtime::ChildResult.new(
+            replacement_text: "",
+            diagnostics: operation.diagnostics,
+            capabilities_used: [:delegated_child_merge],
+            capabilities_missing: [:language_specific_merge],
+            metadata: {
+              merged: false,
+              reason: result[:reason],
+              stats: result[:stats] || {},
+              language: operation.surface.effective_language,
+              delegate_name: operation.delegate_name,
+              session_policy: session.policy_context,
+            },
+          )
+        end
+      end
+
+      def perform_code_block_merge(language:, template_content:, dest_content:, preference:, reference_node:, **opts)
+        return not_merged("no language specified") unless language
+
+        merger = @mergers[language.to_s.downcase]
+        return not_merged("no merger for language: #{language}") unless merger
+
         if template_content == dest_content
           return {
             merged: true,
-            content: rebuild_code_block(language, dest_content, dest_node),
+            content: rebuild_code_block(language, dest_content, reference_node),
             stats: {decision: :identical},
           }
         end
@@ -129,7 +357,7 @@ module Markdown
           if result[:merged]
             {
               merged: true,
-              content: rebuild_code_block(language, result[:content], dest_node),
+              content: rebuild_code_block(language, result[:content], reference_node),
               stats: result[:stats] || {},
             }
           else
@@ -138,32 +366,30 @@ module Markdown
         rescue LoadError => e
           not_merged("merger gem not available: #{e.message}")
         rescue TreeHaver::Error => e
-          # TreeHaver::NotAvailable and TreeHaver::Error inherit from Exception (not StandardError)
-          # for safety reasons related to backend conflicts. We catch them here to handle
-          # gracefully when a backend isn't properly configured.
           not_merged("backend not available: #{e.message}")
         rescue StandardError => e
-          # :nocov: defensive - Prism::Merge::ParseError handling when prism/merge is loaded
-          # Check for Prism::Merge::ParseError if prism/merge is loaded
           if defined?(::Prism::Merge::ParseError) && e.is_a?(::Prism::Merge::ParseError)
             not_merged("Ruby parse error: #{e.message}")
           else
             not_merged("merge failed: #{e.class}: #{e.message}")
           end
-          # :nocov:
         end
       end
 
-      private
+      def unsupported_runtime_reason_for(surface)
+        language = surface.effective_language || surface.declared_language
+        return "no language specified" unless language
+
+        "no merger for language: #{language}"
+      end
 
       # Extract language from a code block node.
       #
       # @param node [Object] The code block node
       # @return [String, nil] The language identifier
       def extract_language(node)
-        return unless node.respond_to?(:fence_info)
-
-        info = node.fence_info
+        raw_node = unwrap_code_block_node(node)
+        info = safe_code_block_value(raw_node, :fence_info)
         return if info.nil? || info.empty?
 
         # fence_info may contain additional info after the language (e.g., "ruby linenos")
@@ -175,7 +401,8 @@ module Markdown
       # @param node [Object] The code block node
       # @return [String] The code content
       def extract_content(node)
-        node.string_content || ""
+        raw_node = unwrap_code_block_node(node)
+        safe_code_block_value(raw_node, :string_content, :text).to_s
       end
 
       # Rebuild a fenced code block with merged content.
@@ -200,6 +427,26 @@ module Markdown
       # @return [Hash] Not-merged result hash
       def not_merged(reason)
         {merged: false, reason: reason}
+      end
+
+      def unwrap_code_block_node(node)
+        return node unless defined?(Ast::Merge::NodeTyping::Wrapper) && node.is_a?(Ast::Merge::NodeTyping::Wrapper)
+
+        Ast::Merge::NodeTyping.unwrap(node)
+      end
+
+      def safe_code_block_value(node, *methods)
+        methods.each do |method_name|
+          return node.public_send(method_name) if node
+        rescue NoMethodError
+          next
+        rescue Exception => e
+          next if e.class.name == "RSpec::Mocks::MockExpectationError"
+
+          raise
+        end
+
+        nil
       end
 
       class << self

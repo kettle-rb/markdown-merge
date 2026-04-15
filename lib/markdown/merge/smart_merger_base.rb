@@ -61,6 +61,9 @@ module Markdown
       # @return [Hash{Symbol,String => #call}, nil] Node typing configuration
       attr_reader :node_typing
 
+      # @return [Ast::Merge::Runtime::Session, nil] Runtime session for this merge
+      attr_reader :runtime_session
+
       # Creates a new SmartMerger for intelligent Markdown file merging.
       #
       # @param template_content [String] Template Markdown source code
@@ -222,6 +225,8 @@ module Markdown
           template_analysis: @template_analysis,
           dest_analysis: @dest_analysis,
         )
+        @runtime_session = nil
+        @runtime_root_operation = nil
       end
 
       def default_match_refiner(inner_merge_lists:)
@@ -272,6 +277,7 @@ module Markdown
         return @merge_result if @merge_result
 
         @merge_result = DebugLogger.time("SmartMergerBase#merge") do
+          prepare_runtime_session!
           alignment = DebugLogger.time("SmartMergerBase#align") do
             @aligner.align
           end
@@ -296,6 +302,7 @@ module Markdown
 
           # Apply post-processing transformations
           content, problems = apply_post_processing(content, problems)
+          complete_runtime_session!(content: content, stats: stats, problems: problems)
 
           # Get final content from OutputBuilder
           MergeResult.new(
@@ -316,6 +323,128 @@ module Markdown
       end
 
       private
+
+      def prepare_runtime_session!
+        root_surface = Ast::Merge::Runtime::Surface.new(
+          surface_kind: :markdown_document,
+          declared_language: :markdown,
+          effective_language: :markdown,
+          address: "document[0]",
+          reconstruction_strategy: :portable_write,
+          metadata: {
+            backend: @template_analysis.respond_to?(:backend) ? @template_analysis.backend : nil,
+          }.compact,
+        )
+        registry = Ast::Merge::Runtime::DelegationRegistry.new(
+          delegates: runtime_delegates,
+          metadata: {
+            source: :markdown_merge,
+          },
+        )
+
+        @runtime_session = Ast::Merge::Runtime::Session.new(
+          policy_context: runtime_policy_context,
+          metadata: runtime_metadata,
+          delegation_registry: registry,
+        )
+        @runtime_root_operation = Ast::Merge::Runtime::Operation.new(
+          operation_id: "markdown-document-root",
+          surface: root_surface,
+          template_fragment: @template_analysis.source.to_s,
+          destination_fragment: @dest_analysis.source.to_s,
+          requested_strategy: :merge_document,
+          options: {
+            inner_merge_code_blocks: !@code_block_merger.nil?,
+            inner_merge_lists: !@list_merger.nil?,
+          },
+        )
+        @runtime_session.register(
+          @runtime_root_operation,
+          frame: Ast::Merge::Runtime::Frame.new(
+            operation_id: @runtime_root_operation.operation_id,
+            depth: 0,
+            surface_path: root_surface.address,
+            language_chain: [:markdown],
+          ),
+          delegate: @runtime_session.resolve_delegate_for(root_surface),
+        )
+      end
+
+      def complete_runtime_session!(content:, stats:, problems:)
+        return unless @runtime_root_operation
+
+        delegated_children = @runtime_root_operation.children.select do |operation|
+          operation.surface.surface_kind == :markdown_fenced_code_block
+        end
+
+        @runtime_root_operation.complete!(
+          result: Ast::Merge::Runtime::ChildResult.new(
+            replacement_text: content,
+            diagnostics: @runtime_root_operation.diagnostics,
+            capabilities_used: runtime_capabilities_used_for(delegated_children),
+            capabilities_missing: runtime_capabilities_missing_for(delegated_children),
+            metadata: {
+              child_operation_ids: @runtime_root_operation.children.map(&:operation_id),
+              stats: stats,
+              problems: problems.all,
+            },
+          ),
+        )
+      end
+
+      def runtime_policy_context
+        {
+          preference: @preference,
+          add_template_only_nodes: @add_template_only_nodes,
+          remove_template_missing_nodes: @remove_template_missing_nodes,
+        }
+      end
+
+      def runtime_metadata
+        {
+          merger_class: self.class.name,
+          inner_merge_code_blocks: !@code_block_merger.nil?,
+          inner_merge_lists: !@list_merger.nil?,
+        }
+      end
+
+      def runtime_delegates
+        [runtime_markdown_delegate, *@code_block_merger&.runtime_delegates.to_a]
+      end
+
+      def runtime_markdown_delegate
+        Ast::Merge::Runtime::Delegate.new(
+          name: "markdown-document",
+          priority: 10,
+          surface_kinds: [:markdown_document],
+          languages: [:markdown],
+          feature_profile: safe_runtime_feature_profile_for(@dest_analysis),
+          capabilities: {merge: [:markdown_document]},
+          metadata: {
+            source: :markdown_merge,
+          },
+        )
+      end
+
+      def safe_runtime_feature_profile_for(analysis)
+        return unless analysis&.respond_to?(:feature_profile)
+
+        analysis.feature_profile
+      rescue StandardError
+        nil
+      end
+
+      def runtime_capabilities_used_for(delegated_children)
+        capabilities = [:top_level_merge]
+        capabilities << :delegated_child_merge unless delegated_children.empty?
+        capabilities
+      end
+
+      def runtime_capabilities_missing_for(delegated_children)
+        return [] unless delegated_children.any?(&:failed?)
+
+        [:delegated_child_merge]
+      end
 
       # Apply post-processing transformations to merged content.
       #
@@ -563,7 +692,7 @@ module Markdown
       def code_block_node?(node)
         return false if node.respond_to?(:freeze_node?) && node.freeze_node?
 
-        node.respond_to?(:type) && node.type == :code_block
+        node.respond_to?(:type) && node.type.to_s == "code_block"
       end
 
       # Check if a node is an ordered or unordered list.
@@ -573,7 +702,7 @@ module Markdown
       def list_node?(node)
         return false if node.respond_to?(:freeze_node?) && node.freeze_node?
 
-        node.respond_to?(:type) && node.type == :list
+        node.respond_to?(:type) && node.type.to_s == "list"
       end
 
       # Try to inner-merge two list nodes at the item level, adding to OutputBuilder.
@@ -617,6 +746,8 @@ module Markdown
           template_node,
           dest_node,
           preference: @preference,
+          runtime_session: @runtime_session,
+          parent_operation: @runtime_root_operation,
           add_template_only_nodes: @add_template_only_nodes,
         )
 

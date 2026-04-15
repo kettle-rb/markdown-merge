@@ -569,6 +569,53 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
   end
 
+  describe "runtime session", :markdown_parsing do
+    it "records fenced code block child operations when inner merge is enabled" do
+      template = <<~MARKDOWN
+        # Example
+
+        ```custom
+        shared value
+        ```
+      MARKDOWN
+      destination = <<~MARKDOWN
+        # Example
+
+        ```custom
+        shared value
+        ```
+      MARKDOWN
+      code_block_merger = Markdown::Merge::CodeBlockMerger.new(
+        mergers: {
+          "custom" => ->(template_content, dest_content, _preference, **) {
+            {
+              merged: true,
+              content: "#{dest_content}\n# merged\n#{template_content}",
+              stats: {decision: :modified},
+            }
+          },
+        },
+      )
+      merger = described_class.new(
+        template,
+        destination,
+        inner_merge_code_blocks: code_block_merger,
+      )
+
+      result = merger.merge
+      runtime_session = merger.runtime_session
+      child_operation = runtime_session.operations.find { |operation| operation.surface.surface_kind == :markdown_fenced_code_block }
+
+      expect(result).to include("shared value")
+      expect(runtime_session).not_to be_nil
+      expect(runtime_session.root_operations.map(&:operation_id)).to include("markdown-document-root")
+      expect(child_operation).not_to be_nil
+      expect(child_operation).to be_completed
+      expect(child_operation.surface.effective_language).to eq(:custom)
+      expect(child_operation.result.metadata[:stats]).to include(decision: :identical)
+    end
+  end
+
   describe "#merge_result", :markdown_parsing do
     it "returns MergeResult object" do
       merger = described_class.new(template_content, dest_content)
