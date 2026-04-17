@@ -27,6 +27,7 @@ module Markdown
       # @param auto_spacing [Boolean] Whether to automatically insert blank lines between structural elements
       def initialize(preserve_formatting: true, auto_spacing: true)
         @parts = []
+        @length = 0
         @preserve_formatting = preserve_formatting
         @auto_spacing = auto_spacing
         @last_node_type = nil  # Track previous node type for spacing decisions
@@ -72,11 +73,12 @@ module Markdown
 
         content = extract_source(node, analysis)
         if content && !content.empty?
-          @parts << content
+          range = append_part(content)
           # Update last node type (track all node types for proper spacing)
           @last_node_type = current_type
           @last_end_line = node_end_line(node)
           @last_analysis = analysis
+          range
         end
       end
 
@@ -85,21 +87,21 @@ module Markdown
       # @param node [LinkDefinitionNode] Link definition node
       def add_link_definition(node)
         formatted = LinkDefinitionFormatter.format(node)
-        @parts << formatted if formatted && !formatted.empty?
+        append_part(formatted) if formatted && !formatted.empty?
       end
 
       # Add gap lines (blank line preservation)
       #
       # @param count [Integer] Number of blank lines to add
       def add_gap_line(count: 1)
-        @parts << ("\n" * count) if count > 0
+        append_part("\n" * count) if count > 0
       end
 
       # Add raw text content
       #
       # @param text [String] Raw text to add
       def add_raw(text)
-        @parts << text if text && !text.empty?
+        append_part(text) if text && !text.empty?
       end
 
       # Get final content
@@ -143,9 +145,17 @@ module Markdown
       # Clear all content
       def clear
         @parts.clear
+        @length = 0
       end
 
       private
+
+      def append_part(text)
+        start_offset = @length
+        @parts << text
+        @length += text.bytesize
+        [start_offset, @length]
+      end
 
       # Check if the current node is adjacent (consecutive lines) to the previous
       # node in the same source file. When true, the original source already has

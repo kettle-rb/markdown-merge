@@ -198,7 +198,11 @@ module Markdown
 
         operation.running!
         child_result = delegate.merge(operation: operation, session: runtime_session)
-        operation.complete!(result: child_result)
+        if child_result.unresolved?
+          operation.unresolved!(result: child_result)
+        else
+          operation.complete!(result: child_result)
+        end
 
         if child_result.metadata[:merged]
           {
@@ -206,6 +210,9 @@ module Markdown
             content: child_result.replacement_text,
             stats: child_result.metadata[:stats] || {},
             runtime_operation_id: operation.operation_id,
+            runtime_surface_path: operation.surface.address,
+            unresolved_cases: child_result.unresolved_cases,
+            metadata: child_result.metadata,
           }
         else
           not_merged(child_result.metadata[:reason] || "merger declined").merge(
@@ -241,6 +248,8 @@ module Markdown
           options: {
             preference: preference,
             add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            resolution_mode: opts.fetch(:resolution_mode, :eager),
+            unresolved_policy: Ast::Merge::UnresolvedPolicy.coerce(opts[:unresolved_policy]).to_h,
             template_content: extract_content(template_node),
             destination_content: extract_content(dest_node),
             reference_node: reference_node,
@@ -301,6 +310,8 @@ module Markdown
           preference: operation.options[:preference],
           reference_node: operation.options[:reference_node],
           add_template_only_nodes: operation.options.fetch(:add_template_only_nodes, false),
+          resolution_mode: operation.options[:resolution_mode],
+          unresolved_policy: operation.options[:unresolved_policy],
         )
 
         if result[:merged]
@@ -309,6 +320,7 @@ module Markdown
             diagnostics: operation.diagnostics,
             capabilities_used: %i[delegated_child_merge language_specific_merge],
             capabilities_missing: [],
+            unresolved_cases: result[:unresolved_cases] || [],
             metadata: {
               merged: true,
               stats: result[:stats] || {},
@@ -365,11 +377,32 @@ module Markdown
         begin
           result = merger.call(template_content, dest_content, preference, nested_mergers: @mergers, **opts)
           if result[:merged]
+            metadata = (result[:metadata] || {}).dup
+            metadata[:root_apply_candidates_by_case_id] = root_apply_candidates_by_case_id(
+              merger: merger,
+              unresolved_cases: result[:unresolved_cases],
+              language: language,
+              template_content: template_content,
+              dest_content: dest_content,
+              preference: preference,
+              reference_node: reference_node,
+              **opts,
+            )
+            metadata[:delegated_apply_renderer] = delegated_apply_renderer(
+              merger: merger,
+              language: language,
+              template_content: template_content,
+              dest_content: dest_content,
+              preference: preference,
+              reference_node: reference_node,
+              **opts,
+            )
             {
               merged: true,
               content: rebuild_code_block(language, result[:content], reference_node),
               stats: result[:stats] || {},
-              metadata: result[:metadata] || {},
+              unresolved_cases: result[:unresolved_cases] || [],
+              metadata: metadata,
             }
           else
             not_merged(result[:reason] || "merger declined").merge(
@@ -395,6 +428,86 @@ module Markdown
         return "no language specified" unless language
 
         "no merger for language: #{language}"
+      end
+
+      def root_apply_candidates_by_case_id(merger:, unresolved_cases:, language:, template_content:, dest_content:, preference:, reference_node:, **opts)
+        cases = Array(unresolved_cases)
+        return {} unless cases.one?
+
+        resolution_case = cases.first
+        {
+          resolution_case.case_id => {
+            template: rebuild_code_block(
+              language,
+              merged_delegate_content_for(
+                merger: merger,
+                template_content: template_content,
+                dest_content: dest_content,
+                preference: preference,
+                case_id: resolution_case.case_id,
+                selection: :template,
+                **opts,
+              ),
+              reference_node,
+            ),
+            destination: rebuild_code_block(
+              language,
+              merged_delegate_content_for(
+                merger: merger,
+                template_content: template_content,
+                dest_content: dest_content,
+                preference: preference,
+                case_id: resolution_case.case_id,
+                selection: :destination,
+                **opts,
+              ),
+              reference_node,
+            ),
+          },
+        }
+      end
+
+      def delegated_apply_renderer(merger:, language:, template_content:, dest_content:, preference:, reference_node:, **opts)
+        lambda do |selections|
+          delegated_result = delegated_merge_result_for(
+            merger: merger,
+            template_content: template_content,
+            dest_content: dest_content,
+            preference: preference,
+            apply_unresolved_resolutions: selections,
+            **opts,
+          )
+          {
+            content: rebuild_code_block(language, delegated_result[:content].to_s, reference_node),
+            unresolved_cases: delegated_result[:unresolved_cases] || [],
+            metadata: delegated_result[:metadata] || {},
+          }
+        end
+      end
+
+      def merged_delegate_content_for(merger:, template_content:, dest_content:, preference:, case_id: nil, selection: nil,
+        apply_unresolved_resolutions: nil, **opts)
+        delegated_merge_result_for(
+          merger: merger,
+          template_content: template_content,
+          dest_content: dest_content,
+          preference: preference,
+          case_id: case_id,
+          selection: selection,
+          apply_unresolved_resolutions: apply_unresolved_resolutions,
+          **opts,
+        )[:content].to_s
+      end
+
+      def delegated_merge_result_for(merger:, template_content:, dest_content:, preference:, case_id: nil, selection: nil,
+        apply_unresolved_resolutions: nil, **opts)
+        merger.call(
+          template_content,
+          dest_content,
+          preference,
+          **opts,
+          apply_unresolved_resolutions: apply_unresolved_resolutions || {case_id => selection},
+        )
       end
 
       # Extract language from a code block node.
@@ -478,12 +591,17 @@ module Markdown
             dest,
             preference: preference,
             add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            resolution_mode: opts.fetch(:resolution_mode, :eager),
+            unresolved_policy: opts[:unresolved_policy],
           )
+          merge_result = merger.merge_result
+          merge_result.apply_unresolved_resolutions!(opts[:apply_unresolved_resolutions]) if opts[:apply_unresolved_resolutions]
 
           {
             merged: true,
-            content: merger.merge,
+            content: merge_result.to_s,
             stats: merger.stats,
+            unresolved_cases: merge_result.unresolved_cases,
           }
         end
 
@@ -501,12 +619,17 @@ module Markdown
             dest,
             preference: preference,
             add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            resolution_mode: opts.fetch(:resolution_mode, :eager),
+            unresolved_policy: opts[:unresolved_policy],
           )
+          merge_result = merger.merge_result
+          merge_result.apply_unresolved_resolutions!(opts[:apply_unresolved_resolutions]) if opts[:apply_unresolved_resolutions]
 
           {
             merged: true,
-            content: merger.merge,
+            content: merge_result.to_yaml,
             stats: merger.stats,
+            unresolved_cases: merge_result.unresolved_cases,
           }
         end
 
@@ -524,12 +647,17 @@ module Markdown
             dest,
             preference: preference,
             add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            resolution_mode: opts.fetch(:resolution_mode, :eager),
+            unresolved_policy: opts[:unresolved_policy],
           )
+          merge_result = merger.merge_result
+          merge_result.apply_unresolved_resolutions!(opts[:apply_unresolved_resolutions]) if opts[:apply_unresolved_resolutions]
 
           {
             merged: true,
-            content: merger.merge,
+            content: merge_result.to_json,
             stats: merger.stats,
+            unresolved_cases: merge_result.unresolved_cases,
           }
         end
 
@@ -550,12 +678,17 @@ module Markdown
             preference: preference,
             add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
             inner_merge_code_blocks: nested_code_block_merger,
+            resolution_mode: opts.fetch(:resolution_mode, :eager),
+            unresolved_policy: opts[:unresolved_policy],
           )
+          merge_result = merger.merge_result
+          merge_result.apply_unresolved_resolutions!(opts[:apply_unresolved_resolutions]) if opts[:apply_unresolved_resolutions]
 
           {
             merged: true,
-            content: merger.merge,
+            content: merge_result.to_s,
             stats: merger.stats,
+            unresolved_cases: merge_result.unresolved_cases,
             metadata: {
               nested_runtime_session: merger.runtime_session&.to_h,
             },
@@ -576,12 +709,17 @@ module Markdown
             dest,
             preference: preference,
             add_template_only_nodes: opts.fetch(:add_template_only_nodes, false),
+            resolution_mode: opts.fetch(:resolution_mode, :eager),
+            unresolved_policy: opts[:unresolved_policy],
           )
+          merge_result = merger.merge_result
+          merge_result.apply_unresolved_resolutions!(opts[:apply_unresolved_resolutions]) if opts[:apply_unresolved_resolutions]
 
           {
             merged: true,
-            content: merger.merge,
+            content: merge_result.to_toml,
             stats: merger.stats,
+            unresolved_cases: merge_result.unresolved_cases,
           }
         end
       end

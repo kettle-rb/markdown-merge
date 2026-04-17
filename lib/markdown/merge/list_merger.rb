@@ -49,23 +49,34 @@ module Markdown
         preference:,
         add_template_only_nodes: true,
         template_analysis: nil,
-        dest_analysis: nil)
+        dest_analysis: nil,
+        resolution_mode: :eager,
+        unresolved_policy: nil)
         t_items = extract_items(template_node)
         d_items = extract_items(dest_node)
 
         return not_merged("empty list") if t_items.empty? && d_items.empty?
 
         alignment = align_items(t_items, d_items)
-        lines = emit_lines(
+        lines, unresolved_cases = emit_lines(
           alignment,
+          template_node: template_node,
+          dest_node: dest_node,
           preference: preference,
           add_template_only: add_template_only_nodes,
           template_analysis: template_analysis,
           dest_analysis: dest_analysis,
+          resolution_mode: resolution_mode,
+          unresolved_policy: Ast::Merge::UnresolvedPolicy.coerce(unresolved_policy),
         )
         return not_merged("no lines emitted") if lines.empty?
 
-        {merged: true, content: lines.join("\n") + "\n", stats: {decision: :merged}}
+        {
+          merged: true,
+          content: lines.join("\n") + "\n",
+          stats: {decision: unresolved_cases.empty? ? :merged : :unresolved},
+          unresolved_cases: unresolved_cases,
+        }
       end
 
       private
@@ -73,12 +84,21 @@ module Markdown
       # --- item extraction ---
 
       def extract_items(list_node)
-        raw = list_node.respond_to?(:__getobj__) ? list_node.__getobj__ : list_node
-        items = []
-        raw.each do |item|
-          items << item if item.respond_to?(:type) && item.type == :list_item
+        raw = Ast::Merge::NodeTyping.unwrap(list_node)
+        children =
+          if raw.respond_to?(:to_a)
+            raw.to_a
+          elsif raw.respond_to?(:children)
+            raw.children
+          elsif raw.respond_to?(:each)
+            raw.each.to_a
+          else
+            []
+          end
+
+        children.select do |item|
+          item.respond_to?(:type) && %w[list_item item].include?(item.type.to_s)
         end
-        items
       end
 
       # --- alignment ---
@@ -155,33 +175,58 @@ module Markdown
 
       # --- emission ---
 
-      def emit_lines(alignment, preference:, add_template_only:,
-        template_analysis:, dest_analysis:)
+      def emit_lines(alignment, template_node:, dest_node:, preference:, add_template_only:,
+        template_analysis:, dest_analysis:, resolution_mode:, unresolved_policy:)
         counter = 1
         lines = []
+        unresolved_cases = []
+        current_offset = 0
 
         alignment.each do |entry|
           case entry[:type]
           when :match
-            node = (preference == :template) ? entry[:template_item] : entry[:dest_item]
-            analysis = (preference == :template) ? template_analysis : dest_analysis
-            text = item_bare_text(node, analysis)
-            lines << "#{counter}. #{text}"
+            template_text = item_bare_text(entry[:template_item], template_analysis)
+            dest_text = item_bare_text(entry[:dest_item], dest_analysis)
+            if unresolved_match?(template_text, dest_text, resolution_mode: resolution_mode, unresolved_policy: unresolved_policy)
+              provisional_winner = unresolved_policy.provisional_winner_for(:matched_list_item, fallback: preference)
+              selected_text = provisional_winner == :template ? template_text : dest_text
+              line = format_list_line(counter, selected_text)
+              lines << line
+              unresolved_cases << build_unresolved_case(
+                template_node: template_node,
+                dest_node: dest_node,
+                template_item: entry[:template_item],
+                dest_item: entry[:dest_item],
+                template_text: format_list_line(counter, template_text),
+                dest_text: format_list_line(counter, dest_text),
+                provisional_winner: provisional_winner,
+                output_range: [current_offset, current_offset + line.bytesize],
+                list_index: counter,
+              )
+            else
+              node = (preference == :template) ? entry[:template_item] : entry[:dest_item]
+              analysis = (preference == :template) ? template_analysis : dest_analysis
+              text = item_bare_text(node, analysis)
+              lines << format_list_line(counter, text)
+            end
             counter += 1
+            current_offset += lines.last.bytesize + 1
           when :dest_only
             text = item_bare_text(entry[:dest_item], dest_analysis)
-            lines << "#{counter}. #{text}"
+            lines << format_list_line(counter, text)
             counter += 1
+            current_offset += lines.last.bytesize + 1
           when :template_only
             next unless add_template_only
 
             text = item_bare_text(entry[:template_item], template_analysis)
-            lines << "#{counter}. #{text}"
+            lines << format_list_line(counter, text)
             counter += 1
+            current_offset += lines.last.bytesize + 1
           end
         end
 
-        lines
+        [lines, unresolved_cases]
       end
 
       # Return the bare inline text of a list_item node (without the leading `1. ` marker).
@@ -205,6 +250,66 @@ module Markdown
       def item_tokens(item)
         text = item.respond_to?(:text) ? item.text.to_s : ""
         extract_tokens(text)
+      end
+
+      def unresolved_match?(template_text, dest_text, resolution_mode:, unresolved_policy:)
+        resolution_mode.to_sym == :unresolved &&
+          unresolved_policy.unresolved_for?(:matched_list_item) &&
+          template_text != dest_text
+      end
+
+      def format_list_line(counter, text)
+        "#{counter}. #{text}"
+      end
+
+      def build_unresolved_case(template_node:, dest_node:, template_item:, dest_item:, template_text:, dest_text:,
+        provisional_winner:, output_range:, list_index:)
+        template_lines = source_span_for(template_item)
+        dest_lines = source_span_for(dest_item)
+        reference_line = template_lines&.first || dest_lines&.first || list_index
+        case_id = "markdown-matched_list_item-#{reference_line}-#{list_index}"
+
+        Ast::Merge::Runtime::ResolutionCase.new(
+          case_id: case_id,
+          reason: :conflict,
+          candidates: {
+            template: template_text,
+            destination: dest_text,
+          },
+          provisional_winner: provisional_winner,
+          surface_path: "#{list_surface_path(template_node, dest_node)} > matched_list_item[index=#{list_index}]",
+          metadata: {
+            template_lines: template_lines,
+            destination_lines: dest_lines,
+            match_kind: :matched_list_item,
+            list_index: list_index,
+            relative_output_range: output_range,
+          }.compact,
+        )
+      end
+
+      def list_surface_path(template_node, dest_node)
+        template_lines = source_span_for(template_node)
+        dest_lines = source_span_for(dest_node)
+        start_line, end_line = template_lines || dest_lines
+
+        if start_line && end_line
+          "document[0] > list[L#{start_line}-L#{end_line}]"
+        else
+          "document[0] > list"
+        end
+      end
+
+      def source_span_for(node)
+        raw = Ast::Merge::NodeTyping.unwrap(node)
+        return unless raw.respond_to?(:source_position)
+
+        position = raw.source_position
+        start_line = position&.dig(:start_line)
+        end_line = position&.dig(:end_line)
+        return unless start_line && end_line
+
+        [start_line, end_line]
       end
 
       def not_merged(reason)

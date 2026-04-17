@@ -64,6 +64,7 @@ module Markdown
       # @return [Ast::Merge::Runtime::Session, nil] Runtime session for this merge
       attr_reader :runtime_session
       attr_reader :corruption_handling
+      attr_reader :resolution_mode, :unresolved_policy
 
       # Creates a new SmartMerger for intelligent Markdown file merging.
       #
@@ -158,6 +159,8 @@ module Markdown
         freeze_token: FileAnalysisBase::DEFAULT_FREEZE_TOKEN,
         match_refiner: nil,
         node_typing: nil,
+        resolution_mode: :eager,
+        unresolved_policy: nil,
         normalize_whitespace: false,
         rehydrate_link_references: false,
         **parser_options
@@ -166,13 +169,19 @@ module Markdown
         @add_template_only_nodes = add_template_only_nodes
         @remove_template_missing_nodes = remove_template_missing_nodes
         @corruption_handling = ::Ast::Merge::Healer.normalize_mode(corruption_handling)
-        @match_refiner = match_refiner || default_match_refiner(inner_merge_lists: inner_merge_lists)
+        @match_refiner = match_refiner || default_match_refiner(
+          inner_merge_lists: inner_merge_lists,
+          inner_merge_code_blocks: inner_merge_code_blocks,
+        )
         @node_typing = node_typing
+        @resolution_mode = resolution_mode
+        @unresolved_policy = Ast::Merge::UnresolvedPolicy.coerce(unresolved_policy)
         @normalize_whitespace = normalize_whitespace
         @rehydrate_link_references = rehydrate_link_references
 
         # Validate node_typing if provided
         Ast::Merge::NodeTyping.validate!(node_typing) if node_typing
+        validate_resolution_mode!(resolution_mode)
 
         # Set up code block merger
         @code_block_merger = case inner_merge_code_blocks
@@ -227,15 +236,21 @@ module Markdown
           preference: @preference,
           template_analysis: @template_analysis,
           dest_analysis: @dest_analysis,
+          resolution_mode: @resolution_mode,
+          unresolved_policy: @unresolved_policy,
         )
         @runtime_session = nil
         @runtime_root_operation = nil
       end
 
-      def default_match_refiner(inner_merge_lists:)
-        return unless inner_merge_lists
+      def default_match_refiner(inner_merge_lists:, inner_merge_code_blocks:)
+        refiners = []
+        refiners << ListMatchRefiner.new if inner_merge_lists
+        refiners << CodeBlockMatchRefiner.new if inner_merge_code_blocks
+        return if refiners.empty?
+        return refiners.first if refiners.length == 1
 
-        ListMatchRefiner.new
+        Ast::Merge::CompositeMatchRefiner.new(*refiners)
       end
 
       # Create a FileAnalysis instance for the given content.
@@ -293,27 +308,30 @@ module Markdown
           })
 
           # Process alignment using OutputBuilder
-          builder, stats, frozen_blocks, conflicts = DebugLogger.time("SmartMergerBase#process") do
+          builder, stats, frozen_blocks, conflicts, unresolved_cases = DebugLogger.time("SmartMergerBase#process") do
             process_alignment(alignment)
           end
 
           # Get content from OutputBuilder
-          content = builder.to_s
+          raw_content = builder.to_s
+          content = raw_content
 
           # Collect problems from post-processing
           problems = DocumentProblems.new
 
           # Apply post-processing transformations
           content, problems = apply_post_processing(content, problems)
-          complete_runtime_session!(content: content, stats: stats, problems: problems)
+          complete_runtime_session!(content: content, stats: stats, problems: problems, unresolved_cases: unresolved_cases)
 
           # Get final content from OutputBuilder
           MergeResult.new(
             content: content,
+            raw_content: raw_content,
             conflicts: conflicts,
             frozen_blocks: frozen_blocks,
             stats: stats,
             problems: problems,
+            unresolved_cases: unresolved_cases,
           )
         end
       end
@@ -323,12 +341,20 @@ module Markdown
       # @return [Hash] Hash with :content, :debug, :runtime, and :statistics keys
       def merge_with_debug
         result = merge_result
+        template_analysis_debug = {
+          valid: @template_analysis&.valid? || false,
+          statements: @template_analysis&.statements&.size || 0,
+        }
+        dest_analysis_debug = {
+          valid: @dest_analysis&.valid? || false,
+          statements: @dest_analysis&.statements&.size || 0,
+        }
 
         {
           content: result.content,
           debug: {
-            template_statements: @template_analysis&.statements&.size || 0,
-            dest_statements: @dest_analysis&.statements&.size || 0,
+            template_statements: template_analysis_debug[:statements],
+            dest_statements: dest_analysis_debug[:statements],
             preference: @preference,
             add_template_only_nodes: @add_template_only_nodes,
             remove_template_missing_nodes: @remove_template_missing_nodes,
@@ -338,6 +364,9 @@ module Markdown
           },
           runtime: runtime_session&.to_h,
           statistics: result.stats,
+          decisions: result.stats,
+          template_analysis: template_analysis_debug,
+          dest_analysis: dest_analysis_debug,
         }
       end
 
@@ -383,6 +412,8 @@ module Markdown
             inner_merge_code_blocks: !@code_block_merger.nil?,
             inner_merge_lists: !@list_merger.nil?,
             corruption_handling: @corruption_handling,
+            resolution_mode: @resolution_mode,
+            unresolved_policy: @unresolved_policy.to_h,
           },
         )
         @runtime_session.register(
@@ -397,26 +428,31 @@ module Markdown
         )
       end
 
-      def complete_runtime_session!(content:, stats:, problems:)
+      def complete_runtime_session!(content:, stats:, problems:, unresolved_cases: [])
         return unless @runtime_root_operation
 
         delegated_children = @runtime_root_operation.children.select do |operation|
           operation.surface.surface_kind == :markdown_fenced_code_block
         end
 
-        @runtime_root_operation.complete!(
-          result: Ast::Merge::Runtime::ChildResult.new(
-            replacement_text: content,
-            diagnostics: @runtime_root_operation.diagnostics,
-            capabilities_used: runtime_capabilities_used_for(delegated_children),
-            capabilities_missing: runtime_capabilities_missing_for(delegated_children),
-            metadata: {
-              child_operation_ids: @runtime_root_operation.children.map(&:operation_id),
-              stats: stats,
-              problems: problems.all,
-            },
-          ),
+        child_result = Ast::Merge::Runtime::ChildResult.new(
+          replacement_text: content,
+          diagnostics: @runtime_root_operation.diagnostics,
+          capabilities_used: runtime_capabilities_used_for(delegated_children),
+          capabilities_missing: runtime_capabilities_missing_for(delegated_children),
+          unresolved_cases: unresolved_cases,
+          metadata: {
+            child_operation_ids: @runtime_root_operation.children.map(&:operation_id),
+            stats: stats,
+            problems: problems.all,
+          },
         )
+
+        if child_result.unresolved?
+          @runtime_root_operation.unresolved!(result: child_result)
+        else
+          @runtime_root_operation.complete!(result: child_result)
+        end
       end
 
       def runtime_policy_context
@@ -425,7 +461,17 @@ module Markdown
           add_template_only_nodes: @add_template_only_nodes,
           remove_template_missing_nodes: @remove_template_missing_nodes,
           corruption_handling: @corruption_handling,
+          resolution_mode: @resolution_mode,
+          unresolved_policy: @unresolved_policy.to_h,
         }
+      end
+
+      def validate_resolution_mode!(resolution_mode)
+        return if Ast::Merge::MergerConfig::VALID_RESOLUTION_MODES.include?(resolution_mode)
+
+        raise ArgumentError,
+          "Invalid resolution_mode: #{resolution_mode.inspect}. " \
+            "Must be one of: #{Ast::Merge::MergerConfig::VALID_RESOLUTION_MODES.map(&:inspect).join(", ")}"
       end
 
       def runtime_metadata
@@ -563,11 +609,12 @@ module Markdown
       # Process alignment entries and build result using OutputBuilder
       #
       # @param alignment [Array<Hash>] Alignment entries
-      # @return [Array] [output_builder, stats, frozen_blocks, conflicts]
+      # @return [Array] [output_builder, stats, frozen_blocks, conflicts, unresolved_cases]
       def process_alignment(alignment)
         builder = OutputBuilder.new
         frozen_blocks = []
         conflicts = []
+        unresolved_cases = []
         stats = {nodes_added: 0, nodes_removed: 0, nodes_modified: 0}
         preserve_removed_separator_gap = false
         link_ownership_context = removal_mode_link_ownership_context(alignment) if @remove_template_missing_nodes
@@ -577,7 +624,7 @@ module Markdown
           case entry[:type]
           when :match
             preserve_removed_separator_gap = false
-            frozen = process_match_to_builder(entry, builder, stats)
+            frozen = process_match_to_builder(entry, builder, stats, conflicts, unresolved_cases)
             frozen_blocks << frozen if frozen
           when :template_only
             preserve_removed_separator_gap = false
@@ -596,7 +643,7 @@ module Markdown
           end
         end
 
-        [builder, stats, frozen_blocks, conflicts]
+        [builder, stats, frozen_blocks, conflicts, unresolved_cases]
       end
 
       # Process a matched node pair, adding to OutputBuilder
@@ -605,19 +652,19 @@ module Markdown
       # @param builder [OutputBuilder] Output builder to add to
       # @param stats [Hash] Statistics hash to update
       # @return [Hash, nil] Frozen block info if applicable
-      def process_match_to_builder(entry, builder, stats)
+      def process_match_to_builder(entry, builder, stats, conflicts, unresolved_cases)
         template_node = apply_node_typing(entry[:template_node])
         dest_node = apply_node_typing(entry[:dest_node])
 
         # Try inner-merge for code blocks first
         if @code_block_merger && code_block_node?(template_node) && code_block_node?(dest_node)
-          inner_result = try_inner_merge_code_block_to_builder(template_node, dest_node, builder, stats)
+          inner_result = try_inner_merge_code_block_to_builder(template_node, dest_node, builder, stats, conflicts, unresolved_cases)
           return if inner_result
         end
 
         # Try inner-merge for lists
         if @list_merger && list_node?(template_node) && list_node?(dest_node)
-          inner_result = try_inner_merge_list_to_builder(template_node, dest_node, builder, stats)
+          inner_result = try_inner_merge_list_to_builder(template_node, dest_node, builder, stats, conflicts, unresolved_cases)
           return if inner_result
         end
 
@@ -627,6 +674,7 @@ module Markdown
           template_index: entry[:template_index],
           dest_index: entry[:dest_index],
         )
+        conflicts << resolution[:conflict] if resolution[:conflict]
 
         frozen_info = nil
 
@@ -645,7 +693,7 @@ module Markdown
             stats[:preserved_destination_link_definitions] += preserved_link_definitions.length
           end
           stats[:nodes_modified] += 1 if resolution[:decision] != :identical
-          builder.add_node_source(raw_template_node, @template_analysis)
+          emitted_range = builder.add_node_source(raw_template_node, @template_analysis)
         when :destination
           if raw_dest_node.respond_to?(:freeze_node?) && raw_dest_node.freeze_node?
             frozen_info = {
@@ -654,10 +702,43 @@ module Markdown
               reason: raw_dest_node.reason,
             }
           end
-          builder.add_node_source(raw_dest_node, @dest_analysis)
+          emitted_range = builder.add_node_source(raw_dest_node, @dest_analysis)
         end
 
+        unresolved_cases << unresolved_case_with_output_range(resolution[:unresolved_case], emitted_range) if resolution[:unresolved_case]
+
         frozen_info
+      end
+
+      def unresolved_case_with_output_range(unresolved_case, output_range)
+        return unresolved_case unless unresolved_case && output_range
+
+        metadata = unresolved_case.metadata.dup
+        relative_output_range = metadata.delete(:relative_output_range)
+        metadata[:output_range] =
+          if relative_output_range
+            output_range_from_relative(output_range, relative_output_range)
+          else
+            output_range
+          end
+
+        Ast::Merge::Runtime::ResolutionCase.new(
+          case_id: unresolved_case.case_id,
+          reason: unresolved_case.reason,
+          candidates: unresolved_case.candidates,
+          provisional_winner: unresolved_case.provisional_winner,
+          surface_path: unresolved_case.surface_path,
+          operation_id: unresolved_case.operation_id,
+          metadata: metadata,
+        )
+      end
+
+      def output_range_from_relative(parent_range, relative_range)
+        start_offset, = Array(parent_range)
+        relative_start, relative_end = Array(relative_range)
+        return parent_range unless [start_offset, relative_start, relative_end].all?
+
+        [start_offset + relative_start.to_i, start_offset + relative_end.to_i]
       end
 
       def preserved_destination_link_definitions_for_match(template_node, dest_node)
@@ -756,7 +837,7 @@ module Markdown
       # @param builder [OutputBuilder] Output builder to add to
       # @param stats [Hash] Statistics hash to update
       # @return [Boolean] true if merged, false to fall back to standard resolution
-      def try_inner_merge_list_to_builder(template_node, dest_node, builder, stats)
+      def try_inner_merge_list_to_builder(template_node, dest_node, builder, stats, conflicts, unresolved_cases)
         result = @list_merger.merge_lists(
           template_node,
           dest_node,
@@ -764,13 +845,20 @@ module Markdown
           add_template_only_nodes: @add_template_only_nodes,
           template_analysis: @template_analysis,
           dest_analysis: @dest_analysis,
+          resolution_mode: @resolution_mode,
+          unresolved_policy: @unresolved_policy,
         )
 
         if result[:merged]
           stats[:nodes_modified] += 1 unless result.dig(:stats, :decision) == :identical
           stats[:inner_merges] ||= 0
           stats[:inner_merges] += 1
-          builder.add_raw(result[:content])
+          emitted_range = builder.add_raw(result[:content])
+          remapped_cases = Array(result[:unresolved_cases]).map do |resolution_case|
+            unresolved_case_with_output_range(resolution_case, emitted_range)
+          end
+          unresolved_cases.concat(remapped_cases)
+          conflicts.concat(remapped_cases.map { |resolution_case| conflict_for_resolution_case(resolution_case) })
           true
         else
           DebugLogger.debug("List inner-merge skipped", {reason: result[:reason]})
@@ -785,7 +873,7 @@ module Markdown
       # @param builder [OutputBuilder] Output builder to add to
       # @param stats [Hash] Statistics hash to update
       # @return [Boolean] true if merged, false to fall back to standard resolution
-      def try_inner_merge_code_block_to_builder(template_node, dest_node, builder, stats)
+      def try_inner_merge_code_block_to_builder(template_node, dest_node, builder, stats, conflicts, unresolved_cases)
         result = @code_block_merger.merge_code_blocks(
           template_node,
           dest_node,
@@ -793,18 +881,86 @@ module Markdown
           runtime_session: @runtime_session,
           parent_operation: @runtime_root_operation,
           add_template_only_nodes: @add_template_only_nodes,
+          resolution_mode: @resolution_mode,
+          unresolved_policy: @unresolved_policy,
         )
 
         if result[:merged]
           stats[:nodes_modified] += 1 unless result.dig(:stats, :decision) == :identical
           stats[:inner_merges] ||= 0
           stats[:inner_merges] += 1
-          builder.add_raw(result[:content])
+          emitted_range = builder.add_raw(result[:content])
+          remapped_cases = remap_delegated_unresolved_cases(
+            result[:unresolved_cases],
+            result[:runtime_operation_id],
+            result[:runtime_surface_path],
+            emitted_range,
+            result[:metadata],
+          )
+          unresolved_cases.concat(remapped_cases)
+          conflicts.concat(remapped_cases.map { |resolution_case| conflict_for_resolution_case(resolution_case) })
           true
         else
           DebugLogger.debug("Inner-merge skipped", {reason: result[:reason]})
           false # Fall back to standard resolution
         end
+      end
+
+      def remap_delegated_unresolved_cases(unresolved_cases, runtime_operation_id, runtime_surface_path, output_range = nil, delegated_metadata = nil)
+        root_apply_candidates = delegated_metadata.to_h[:root_apply_candidates_by_case_id].to_h
+        delegated_apply_renderer = delegated_metadata.to_h[:delegated_apply_renderer]
+        Array(unresolved_cases).map do |resolution_case|
+          suffix = delegated_surface_suffix_for(resolution_case.surface_path)
+          metadata = resolution_case.metadata.merge(
+            delegated_case_id: resolution_case.case_id,
+          )
+          apply_candidates = root_apply_candidates[resolution_case.case_id]
+          if output_range && apply_candidates
+            metadata = metadata.merge(
+              output_range: output_range,
+              output_candidate_by_selection: apply_candidates,
+            )
+          end
+          if output_range && delegated_apply_renderer
+            metadata = metadata.merge(
+              output_range: output_range,
+              delegated_apply_group: runtime_operation_id,
+              delegated_apply_renderer: delegated_apply_renderer,
+              delegated_applied_selections: {},
+              delegated_root_applied_selections: {},
+              delegated_runtime_operation_id: runtime_operation_id,
+              delegated_runtime_surface_path: runtime_surface_path,
+            )
+          end
+
+          Ast::Merge::Runtime::ResolutionCase.new(
+            case_id: "#{runtime_operation_id}-#{resolution_case.case_id}",
+            reason: resolution_case.reason,
+            candidates: resolution_case.candidates,
+            provisional_winner: resolution_case.provisional_winner,
+            surface_path: [runtime_surface_path, suffix].compact.join(" > "),
+            operation_id: runtime_operation_id,
+            metadata: metadata,
+          )
+        end
+      end
+
+      def delegated_surface_suffix_for(surface_path)
+        path = surface_path.to_s
+        return if path.empty? || path == "document[0]"
+
+        path.sub(/\Adocument\[0\]\s*>\s*/, "")
+      end
+
+      def conflict_for_resolution_case(resolution_case)
+        {
+          case_id: resolution_case.case_id,
+          reason: resolution_case.reason,
+          template: resolution_case.candidates[:template],
+          destination: resolution_case.candidates[:destination],
+          provisional_winner: resolution_case.provisional_winner,
+          location: resolution_case.surface_path,
+        }.compact
       end
 
       # Try to inner-merge two code block nodes.

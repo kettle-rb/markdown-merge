@@ -221,6 +221,142 @@ RSpec.describe Markdown::Merge::MergeResult do
     end
   end
 
+  describe "unresolved review application" do
+    it "rewrites string-backed content using output range metadata" do
+      result = described_class.new(content: "# Destination\n")
+      result.record_unresolved_choice(
+        template_text: "# Template\n",
+        destination_text: "# Destination\n",
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-1",
+        metadata: {output_range: [0, "# Destination\n".bytesize]},
+      )
+
+      result.apply_unresolved_resolutions!("markdown-matched_block-1" => :template)
+
+      expect(result.to_s).to eq("# Template\n")
+      expect(result.review_required?).to be(false)
+    end
+
+    it "raises when post-processing changed markdown output after range capture" do
+      result = described_class.new(content: "# Destination", raw_content: "# Destination\n")
+      result.record_unresolved_choice(
+        template_text: "# Template\n",
+        destination_text: "# Destination\n",
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-1",
+        metadata: {output_range: [0, "# Destination\n".bytesize]},
+      )
+
+      expect {
+        result.apply_unresolved_resolutions!("markdown-matched_block-1" => :template)
+      }.to raise_error(ArgumentError, /post-processing transformed markdown output/)
+    end
+
+    it "applies multiple output-range resolutions in one call without shifting later ranges" do
+      content = "# Destination One\n\n# Destination Two\n"
+      first_destination = "# Destination One\n"
+      second_destination = "# Destination Two\n"
+      first_template = "# Template One Extended\n"
+      second_template = "# Template Two\n"
+      second_start = content.index(second_destination)
+
+      result = described_class.new(content: content)
+      result.record_unresolved_choice(
+        template_text: first_template,
+        destination_text: first_destination,
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-1",
+        metadata: {output_range: [0, first_destination.bytesize]},
+      )
+      result.record_unresolved_choice(
+        template_text: second_template,
+        destination_text: second_destination,
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-2",
+        metadata: {output_range: [second_start, second_start + second_destination.bytesize]},
+      )
+
+      result.apply_unresolved_resolutions!(
+        "markdown-matched_block-1" => :template,
+        "markdown-matched_block-2" => :template,
+      )
+
+      expect(result.to_s).to eq("#{first_template}\n#{second_template}")
+      expect(result.review_required?).to be(false)
+    end
+
+    it "rejects persisted review state when the selected case is no longer present" do
+      result = described_class.new(content: "# Destination\n")
+      result.record_unresolved_choice(
+        template_text: "# Template\n",
+        destination_text: "# Destination\n",
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-1",
+        metadata: {output_range: [0, "# Destination\n".bytesize], match_kind: :matched_block},
+      )
+
+      state = Ast::Merge::UnresolvedReviewState.new(
+        cases: result.unresolved_cases,
+        selections: {"markdown-matched_block-2" => :template},
+      )
+
+      expect {
+        result.apply_unresolved_review_state!(state)
+      }.to raise_error(ArgumentError, /case markdown-matched_block-2 is not present/)
+    end
+
+    it "rejects persisted review state when the saved case identity no longer matches" do
+      result = described_class.new(content: "# Destination\n")
+      result.record_unresolved_choice(
+        template_text: "# Template\n",
+        destination_text: "# Destination\n",
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-1",
+        surface_path: "document[0] > matched_block[line=1]",
+        metadata: {output_range: [0, "# Destination\n".bytesize], match_kind: :matched_block},
+      )
+
+      state = Ast::Merge::UnresolvedReviewState.new(
+        cases: [
+          Ast::Merge::Runtime::ResolutionCase.new(
+            case_id: "markdown-matched_block-1",
+            reason: :conflict,
+            candidates: {template: "# Different Template\n", destination: "# Destination\n"},
+            provisional_winner: :destination,
+            surface_path: "document[0] > matched_block[line=1]",
+            metadata: {match_kind: :matched_block, review_identity: "stale-identity"},
+          ),
+        ],
+        selections: {"markdown-matched_block-1" => :template},
+        metadata: {markdown_review_state: {selection_identities: {"markdown-matched_block-1" => "stale-identity"}}},
+      )
+
+      expect {
+        result.apply_unresolved_review_state!(state)
+      }.to raise_error(ArgumentError, /no longer matches the current unresolved surface/)
+    end
+
+    it "rejects persisted review state before mutating when post-processing changed markdown output" do
+      result = described_class.new(content: "# Destination", raw_content: "# Destination\n")
+      result.record_unresolved_choice(
+        template_text: "# Template\n",
+        destination_text: "# Destination\n",
+        provisional_winner: :destination,
+        case_id: "markdown-matched_block-1",
+        metadata: {output_range: [0, "# Destination\n".bytesize], match_kind: :matched_block},
+      )
+
+      state = result.to_unresolved_review_state(selections: {"markdown-matched_block-1" => :template})
+
+      expect {
+        result.apply_unresolved_review_state!(state)
+      }.to raise_error(ArgumentError, /review state.*post-processing transformed markdown output/)
+      expect(result.to_s).to eq("# Destination")
+      expect(result.review_required?).to be(true)
+    end
+  end
+
   describe "inheritance" do
     it "inherits from Ast::Merge::MergeResultBase" do
       expect(described_class.ancestors).to include(Ast::Merge::MergeResultBase)

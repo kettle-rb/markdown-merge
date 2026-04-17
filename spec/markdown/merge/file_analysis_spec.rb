@@ -27,6 +27,34 @@ RSpec.describe Markdown::Merge::FileAnalysis do
     MARKDOWN
   end
 
+  describe "FileAnalyzable contract", :markdown_parsing do
+    it_behaves_like "Ast::Merge::FileAnalyzable" do
+      let(:file_analysis_class) { described_class }
+      let(:freeze_node_class) { Markdown::Merge::FreezeNode }
+      let(:sample_source) { simple_markdown }
+      let(:sample_source_with_freeze) { markdown_with_freeze }
+      let(:build_file_analysis) do
+        ->(source, **opts) { described_class.new(source, **opts) }
+      end
+
+      let(:analysis_expected_feature_profile) do
+        {
+          owner_selector: :shared_default,
+          match_key: :signature,
+          read_strategy: :source_augmented_portable_write,
+          attachment_strategy: :normalize_tracked_layout_merge,
+          comment_style: :html_comment,
+          render_family: nil,
+          capabilities: {layout_aware: true, logical_owner: true},
+          logical_owners: {link_definition: :preserve_if_referenced},
+          repair_policies: [],
+          surfaces: [{name: :fenced_code_block, selector: :language_tag, metadata: {}}],
+          delegation_policies: [{surface_name: :fenced_code_block, strategy: :by_language, metadata: {}}],
+        }
+      end
+    end
+  end
+
   describe "#initialize", :markdown_parsing do
     it "creates analysis with auto backend" do
       analysis = described_class.new(simple_markdown)
@@ -125,24 +153,6 @@ RSpec.describe Markdown::Merge::FileAnalysis do
       expect(analysis.comment_support_style.synthetic_write?).to be(true)
       expect(analysis.comment_support_style.details[:source]).to eq(:markdown_source)
       expect(analysis.comment_support_style.details[:style]).to eq(:html_comment)
-    end
-  end
-
-  describe "#feature_profile", :markdown_parsing do
-    it "advertises Markdown logical owners and delegated code-block surfaces" do
-      analysis = described_class.new(simple_markdown)
-      profile = analysis.feature_profile
-
-      expect(profile.read_strategy).to eq(:source_augmented_portable_write)
-      expect(profile.attachment_strategy).to eq(:normalize_tracked_layout_merge)
-      expect(profile.comment_style).to eq(:html_comment)
-      expect(profile.logical_owners).to eq(link_definition: :preserve_if_referenced)
-      expect(profile.surfaces.map(&:to_h)).to eq(
-        [{name: :fenced_code_block, selector: :language_tag, metadata: {}}],
-      )
-      expect(profile.delegation_policies.map(&:to_h)).to eq(
-        [{surface_name: :fenced_code_block, strategy: :by_language, metadata: {}}],
-      )
     end
   end
 

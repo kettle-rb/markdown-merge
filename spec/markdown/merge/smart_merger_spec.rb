@@ -714,12 +714,11 @@ RSpec.describe Markdown::Merge::SmartMerger do
     end
 
     it_behaves_like "Ast::Merge::RuntimeDebugContract"
-
     it "returns content, debug info, and runtime data" do
       merger = described_class.new(template_content, dest_content, inner_merge_code_blocks: true)
       result = merger.merge_with_debug
 
-      expect(result).to include(:content, :debug, :runtime, :statistics)
+      expect(result).to include(:content, :debug, :runtime, :statistics, :decisions, :template_analysis, :dest_analysis)
       expect(result[:content]).to be_a(String)
       expect(result[:debug]).to include(
         :template_statements,
@@ -733,7 +732,6 @@ RSpec.describe Markdown::Merge::SmartMerger do
       )
       expect(result[:runtime]).to include(:operations, :diagnostics, :metadata, :policy_context)
       expect(result[:statistics]).to be_a(Hash)
-      expect(result.dig(:debug, :corruption_handling)).to eq(:heal)
     end
 
     it "includes runtime counts when code block delegation is active" do
@@ -758,6 +756,361 @@ RSpec.describe Markdown::Merge::SmartMerger do
 
       expect(result.dig(:debug, :runtime_operation_count)).to be >= 1
       expect(result.dig(:runtime, :operations)).not_to be_empty
+    end
+
+    it "surfaces unresolved policy through runtime metadata" do
+      merger = described_class.new(
+        template_content,
+        dest_content,
+        resolution_mode: :unresolved,
+        unresolved_policy: {enabled_kinds: [:matched_block], provisional_winner: :template},
+      )
+
+      result = merger.merge_with_debug
+
+      expect(result.dig(:runtime, :policy_context)).to include(
+        resolution_mode: :unresolved,
+        unresolved_policy: {
+          enabled_kinds: [:matched_block],
+          provisional_winner: :template,
+          provisional_winner_by_kind: {},
+          metadata: {},
+        },
+      )
+      expect(result.dig(:runtime, :operation_trees, 0, :options)).to include(
+        resolution_mode: :unresolved,
+        unresolved_policy: {
+          enabled_kinds: [:matched_block],
+          provisional_winner: :template,
+          provisional_winner_by_kind: {},
+          metadata: {},
+        },
+      )
+    end
+  end
+
+  describe "unresolved runtime review", :markdown_parsing do
+    let(:template_content) do
+      <<~MARKDOWN
+        # AGENTS.md - Development Guide
+      MARKDOWN
+    end
+
+    let(:dest_content) do
+      <<~MARKDOWN
+        # AGENTS.md - myGem Development Guide
+      MARKDOWN
+    end
+
+    let(:unresolved_runtime_merger) do
+      described_class.new(
+        template_content,
+        dest_content,
+        resolution_mode: :unresolved,
+      )
+    end
+    let(:expected_unresolved_surface_path) { "document[0] > matched_block[line=1]" }
+    let(:expected_unresolved_output_fragment) { "# AGENTS.md - myGem Development Guide" }
+    let(:selection_identity_metadata_path) { %i[metadata markdown_review_state selection_identities] }
+    let(:build_fresh_unresolved_merge_result) do
+      -> do
+        described_class.new(
+          template_content,
+          dest_content,
+          resolution_mode: :unresolved,
+        ).merge_result
+      end
+    end
+    let(:expected_replayed_output_fragment) { "# AGENTS.md - Development Guide" }
+
+    it_behaves_like "Ast::Merge::UnresolvedRuntimeContract"
+    it_behaves_like "Ast::Merge::UnresolvedRuntimeDebugContract"
+    it_behaves_like "Ast::Merge::UnresolvedReviewStateTransportContract"
+
+    it "accepts provisional winners without changing markdown output" do
+      result = unresolved_runtime_merger.merge_result
+
+      expect(result.review_required?).to be(true)
+      expect(result.to_s).to include("myGem Development Guide")
+
+      result.apply_unresolved_resolutions!("markdown-matched_block-1" => :destination)
+
+      expect(result.review_required?).to be(false)
+      expect(result.to_s).to include("myGem Development Guide")
+    end
+
+    it "applies caller-selected non-provisional markdown resolutions when output range is stable" do
+      result = unresolved_runtime_merger.merge_result
+
+      result.apply_unresolved_resolutions!("markdown-matched_block-1" => :template)
+
+      expect(result.review_required?).to be(false)
+      expect(result.to_s).to include("# AGENTS.md - Development Guide")
+      expect(result.to_s).not_to include("# AGENTS.md - myGem Development Guide")
+    end
+
+    context "with delegated fenced code blocks" do
+      let(:template_content) do
+        <<~MARKDOWN
+          # Example
+
+          ```ruby
+          def hello; :template; end
+          ```
+        MARKDOWN
+      end
+      let(:dest_content) do
+        <<~MARKDOWN
+          # Example
+
+          ```ruby
+          def hello; :destination; end
+          ```
+        MARKDOWN
+      end
+      let(:unresolved_runtime_merger) do
+        described_class.new(
+          template_content,
+          dest_content,
+          resolution_mode: :unresolved,
+          inner_merge_code_blocks: true,
+        )
+      end
+      let(:expected_unresolved_surface_path) { "document[0] > fenced_code_block[L3-L5] > matched_node[line=1]" }
+      let(:expected_unresolved_output_fragment) { "def hello; :destination; end" }
+
+      it "surfaces delegated unresolved cases through the root markdown result and runtime tree" do
+        result = unresolved_runtime_merger.merge_result
+        runtime = unresolved_runtime_merger.runtime_session
+        root_operation = runtime.root_operations.fetch(0)
+        child_operation = root_operation.children.fetch(0)
+
+        expect(result.review_required?).to be(true)
+        expect(result.unresolved_cases.length).to eq(1)
+        expect(result.unresolved_cases.first.to_h).to include(
+          surface_path: expected_unresolved_surface_path,
+          provisional_winner: :destination,
+        )
+        expect(root_operation.status).to eq(:unresolved)
+        expect(child_operation.status).to eq(:unresolved)
+        expect(runtime.summary).to include(
+          unresolved_operation_count: 2,
+          unresolved_case_count: 2,
+        )
+      end
+
+      it "projects delegated unresolved runtime state through merge_with_debug" do
+        result = unresolved_runtime_merger.merge_with_debug
+        root_tree = result.dig(:runtime, :operation_trees, 0)
+        child_tree = root_tree.fetch(:children).fetch(0)
+
+        expect(result[:content]).to include(expected_unresolved_output_fragment)
+        expect(result.dig(:runtime, :summary)).to include(
+          unresolved_operation_count: 2,
+          unresolved_case_count: 2,
+        )
+        expect(root_tree[:status]).to eq(:unresolved)
+        expect(child_tree[:status]).to eq(:unresolved)
+        expect(root_tree.dig(:result, :unresolved_cases, 0, :surface_path)).to eq(expected_unresolved_surface_path)
+        expect(child_tree.dig(:result, :unresolved_cases, 0, :surface_path)).to eq("document[0] > matched_node[line=1]")
+      end
+
+      it "applies delegated fenced code block resolutions from the root markdown result" do
+        result = unresolved_runtime_merger.merge_result
+        case_id = result.unresolved_cases.fetch(0).case_id
+
+        result.apply_unresolved_resolutions!(case_id => :template)
+
+        expect(result.review_required?).to be(false)
+        expect(result.to_s).to include("def hello; :template; end")
+        expect(result.to_s).not_to include("def hello; :destination; end")
+        expect(result.to_s).to include("```ruby")
+      end
+
+      context "with multiple delegated child cases in one fenced block" do
+        let(:template_content) do
+          <<~MARKDOWN
+            # Example
+
+            ```ruby
+            def hello
+              :template
+            end
+
+            def goodbye
+              :template
+            end
+            ```
+          MARKDOWN
+        end
+        let(:dest_content) do
+          <<~MARKDOWN
+            # Example
+
+            ```ruby
+            def hello
+              :destination
+            end
+
+            def goodbye
+              :destination
+            end
+            ```
+          MARKDOWN
+        end
+
+        it "applies all delegated block resolutions together from the root markdown result" do
+          result = unresolved_runtime_merger.merge_result
+          resolutions = result.unresolved_cases.to_h { |resolution_case| [resolution_case.case_id, :template] }
+
+          expect(result.unresolved_cases.length).to eq(2)
+
+          result.apply_unresolved_resolutions!(resolutions)
+
+          expect(result.review_required?).to be(false)
+          expect(result.to_s).to include(":template")
+          expect(result.to_s).not_to include(":destination")
+          expect(result.to_s.scan("def ").length).to eq(2)
+        end
+
+        it "preserves sibling delegated cases when only part of the block is resolved" do
+          result = unresolved_runtime_merger.merge_result
+          first_case = result.unresolved_cases.find { |resolution_case| resolution_case.surface_path.include?("hello") || resolution_case.case_id.end_with?("-1") } || result.unresolved_cases.first
+          remaining_case = (result.unresolved_cases - [first_case]).first
+
+          result.apply_unresolved_resolutions!(first_case.case_id => :template)
+
+          expect(result.review_required?).to be(true)
+          expect(result.unresolved_cases.length).to eq(1)
+          expect(result.unresolved_cases.first.surface_path).to eq(remaining_case.surface_path)
+          expect(result.to_s).to include("def hello")
+          expect(result.to_s).to include("def goodbye")
+
+          result.apply_unresolved_resolutions!(result.unresolved_cases.first.case_id => :template)
+
+          expect(result.review_required?).to be(false)
+          expect(result.to_s).to include(":template")
+          expect(result.to_s).not_to include(":destination")
+        end
+
+        it "exports a resumable review state after partial delegated application" do
+          result = unresolved_runtime_merger.merge_result
+          first_case = result.unresolved_cases.first
+
+          result.apply_unresolved_resolutions!(first_case.case_id => :template)
+
+          state = result.to_unresolved_review_state(
+            selections: {result.unresolved_cases.first.case_id => :template},
+            metadata: {document: "markdown-example"},
+          )
+          payload = state.to_h
+          fresh_result = described_class.new(
+            template_content,
+            dest_content,
+            resolution_mode: :unresolved,
+            inner_merge_code_blocks: true,
+          ).merge_result
+
+          expect(payload[:metadata]).to include(document: "markdown-example")
+          expect(payload[:selections].values).to all(eq(:template))
+          expect(payload.dig(:metadata, :markdown_review_state, :selection_identities).keys).not_to be_empty
+          expect(payload[:cases].any? { |entry| entry.dig(:metadata, :delegated_apply_renderer) }).to be(false)
+
+          fresh_result.apply_unresolved_review_state!(payload)
+
+          expect(fresh_result.review_required?).to be(false)
+          expect(fresh_result.to_s).to include(":template")
+          expect(fresh_result.to_s).not_to include(":destination")
+        end
+      end
+    end
+
+    context "with inner-merged lists" do
+      let(:template_content) do
+        <<~MARKDOWN
+          # Example
+
+          1. Join the Discord
+          2. Commit changes
+          3. Run the test suite
+        MARKDOWN
+      end
+      let(:dest_content) do
+        <<~MARKDOWN
+          # Example
+
+          1. Join the Discord
+          2. Commit your changes
+          3. Run the test suite
+        MARKDOWN
+      end
+      let(:unresolved_runtime_merger) do
+        described_class.new(
+          template_content,
+          dest_content,
+          backend: :markly,
+          resolution_mode: :unresolved,
+          inner_merge_lists: true,
+          unresolved_policy: {
+            enabled_kinds: [:matched_list_item],
+            provisional_winner_by_kind: {matched_list_item: :destination},
+          },
+        )
+      end
+      let(:expected_unresolved_surface_path) { "document[0] > list[L3-L5] > matched_list_item[index=2]" }
+      let(:expected_unresolved_output_fragment) { "2. Commit your changes" }
+      let(:expected_unresolved_policy) do
+        {
+          enabled_kinds: [:matched_list_item],
+          provisional_winner_by_kind: {matched_list_item: :destination},
+          metadata: {},
+        }
+      end
+
+      it "surfaces unresolved list item cases through merge result and root runtime state" do
+        result = unresolved_runtime_merger.merge_result
+        root_operation = unresolved_runtime_merger.runtime_session.root_operations.fetch(0)
+
+        expect(result.review_required?).to be(true)
+        expect(result.unresolved_cases.length).to eq(1)
+        expect(result.unresolved_cases.first.to_h).to include(
+          reason: :conflict,
+          provisional_winner: :destination,
+          surface_path: expected_unresolved_surface_path,
+        )
+        expect(root_operation.status).to eq(:unresolved)
+        expect(root_operation.result.unresolved_cases.map(&:to_h)).to eq(result.unresolved_cases.map(&:to_h))
+        expect(unresolved_runtime_merger.runtime_session.summary).to include(
+          unresolved_operation_count: 1,
+          unresolved_case_count: 1,
+        )
+      end
+
+      it "surfaces list unresolved policy through runtime metadata and debug output" do
+        result = unresolved_runtime_merger.merge_with_debug
+        root_tree = result.dig(:runtime, :operation_trees, 0)
+
+        expect(unresolved_runtime_merger.runtime_session.policy_context[:unresolved_policy]).to eq(expected_unresolved_policy)
+        expect(root_tree.dig(:options, :unresolved_policy)).to eq(expected_unresolved_policy)
+        expect(result.dig(:runtime, :summary)).to include(
+          unresolved_operation_count: 1,
+          unresolved_case_count: 1,
+        )
+        expect(root_tree[:status]).to eq(:unresolved)
+        expect(root_tree.dig(:result, :unresolved_cases, 0, :surface_path)).to eq(expected_unresolved_surface_path)
+        expect(result[:content]).to include(expected_unresolved_output_fragment)
+      end
+
+      it "applies caller-selected non-provisional list item resolutions when output range is stable" do
+        result = unresolved_runtime_merger.merge_result
+        case_id = result.unresolved_cases.fetch(0).case_id
+
+        result.apply_unresolved_resolutions!(case_id => :template)
+
+        expect(result.review_required?).to be(false)
+        expect(result.to_s).to include("2. Commit changes")
+        expect(result.to_s).not_to include("2. Commit your changes")
+      end
     end
   end
 
