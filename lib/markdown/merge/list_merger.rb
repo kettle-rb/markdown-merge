@@ -189,7 +189,7 @@ module Markdown
             dest_text = item_bare_text(entry[:dest_item], dest_analysis)
             if unresolved_match?(template_text, dest_text, resolution_mode: resolution_mode, unresolved_policy: unresolved_policy)
               provisional_winner = unresolved_policy.provisional_winner_for(:matched_list_item, fallback: preference)
-              selected_text = provisional_winner == :template ? template_text : dest_text
+              selected_text = (provisional_winner == :template) ? template_text : dest_text
               line = format_list_line(counter, selected_text)
               lines << line
               unresolved_cases << build_unresolved_case(

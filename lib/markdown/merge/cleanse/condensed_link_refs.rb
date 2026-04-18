@@ -277,6 +277,7 @@ module Markdown
           # Find first occurrence of [label]:
           first_bracket = line.index("[")
           return false unless first_bracket
+          return false if inside_inline_code?(line, first_bracket)
 
           # Check if there's non-whitespace content before it
           prefix = line[0...first_bracket].strip
@@ -302,6 +303,7 @@ module Markdown
           # Look for pattern: [anything]:
           first_bracket = line.index("[")
           return unless first_bracket
+          return if inside_inline_code?(line, first_bracket)
 
           # Try parsing from the first bracket onward
           candidate = line[first_bracket..]
@@ -398,6 +400,10 @@ module Markdown
         def clean_url(url)
           url = url.strip
           (url.start_with?("<") && url.end_with?(">")) ? url[1..-2] : url
+        end
+
+        def inside_inline_code?(line, index)
+          line[0...index].count("`").odd?
         end
       end
     end

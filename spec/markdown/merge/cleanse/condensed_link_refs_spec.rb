@@ -51,6 +51,12 @@ RSpec.describe Markdown::Merge::Cleanse::CondensedLinkRefs do
       expect(parser.condensed?).to be false
     end
 
+    it "returns false for inline-code examples that contain a link-definition shape" do
+      text = "    - Emoji in labels: `[🎨logo]: url`"
+      parser = described_class.new(text)
+      expect(parser.condensed?).to be false
+    end
+
     it "returns true for condensed refs with relative URL (CONTRIBUTING.md)" do
       text = "https://donate.codeberg.org/[🤝contributing]: CONTRIBUTING.md"
       parser = described_class.new(text)
@@ -170,6 +176,13 @@ RSpec.describe Markdown::Merge::Cleanse::CondensedLinkRefs do
 
     it "returns original for already-separated definitions" do
       text = "[label1]: https://example1.com\n[label2]: https://example2.com\n"
+      parser = described_class.new(text)
+
+      expect(parser.expand).to eq(text)
+    end
+
+    it "preserves inline-code examples unchanged" do
+      text = "    - Emoji in labels: `[🎨logo]: url`\n"
       parser = described_class.new(text)
 
       expect(parser.expand).to eq(text)

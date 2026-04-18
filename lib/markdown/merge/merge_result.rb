@@ -400,7 +400,7 @@ module Markdown
             case_metadata_value(resolution_case, :match_kind),
             resolution_case.candidates[:template],
             resolution_case.candidates[:destination],
-          ].map(&:to_s).join("\u001f")
+          ].map(&:to_s).join("\u001f"),
         )
       end
 
@@ -442,7 +442,7 @@ module Markdown
               "cannot apply markdown review state: case #{case_id} no longer matches the current unresolved markdown surface"
           end
 
-          next unless current_case&.metadata[:output_range]
+          next unless current_case&.metadata&.[](:output_range)
           next if @content_raw == @raw_content
 
           raise ArgumentError,

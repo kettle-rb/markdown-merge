@@ -1,8 +1,18 @@
 {
-  "lib/markdown/merge/file_aligner.rb:1200791912": [
+  "lib/markdown/merge/code_block_merger.rb:2699303167": [
+    [570, 9, 109, "Lint/RescueException: Avoid rescuing the `Exception` class. Perhaps you meant to rescue `StandardError`?", 2367663321]
+  ],
+  "lib/markdown/merge/file_aligner.rb:2219685166": [
     [141, 36, 16, "Style/RedundantEach: Use `with_object` to remove redundant `each`.", 4071736605]
   ],
-  "spec/markdown/merge/comment_behavior_complements_spec.rb:1604334868": [
+  "lib/markdown/merge/merge_result.rb:698523332": [
+    [280, 23, 47, "Style/ComparableBetween: Prefer `start_offset.between?(0, end_offset)` over logical comparison.", 3001207720],
+    [281, 9, 49, "Style/InvertibleUnlessCondition: Prefer `if end_offset > @raw_content.bytesize` over `unless end_offset <= @raw_content.bytesize`.", 3624029554]
+  ],
+  "lib/markdown/merge/smart_merger_base.rb:3779186479": [
+    [518, 9, 51, "Style/InvertibleUnlessCondition: Prefer `if delegated_children.none?(&:failed?)` over `unless delegated_children.any?(&:failed?)`.", 1008394314]
+  ],
+  "spec/markdown/merge/comment_behavior_complements_spec.rb:4063088507": [
     [3, 1, 94, "RSpec/SpecFilePathFormat: Spec path should end with `markdown/merge/smart_merger*comment_behavior_complements*_spec.rb`.", 1090409225],
     [3, 46, 30, "RSpec/DescribeMethod: The second argument to describe should be the method being tested. '#instance' or '.class'.", 1360117347],
     [14, 16, 28, "RSpec/DescribedClass: Use `described_class` instead of `Markdown::Merge::SmartMerger`.", 3119804521],

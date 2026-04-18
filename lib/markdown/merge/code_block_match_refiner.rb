@@ -33,7 +33,7 @@ module Markdown
         context_score = surrounding_context_similarity(template_node, template_analysis, dest_node, dest_analysis)
         position_score = relative_position_similarity(template_node, template_analysis, dest_node, dest_analysis)
 
-        (0.75) + (context_score * 0.15) + (position_score * 0.10)
+        0.75 + (context_score * 0.15) + (position_score * 0.10)
       end
 
       def normalized_fence_info(node)
